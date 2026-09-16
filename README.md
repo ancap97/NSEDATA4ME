@@ -1,8 +1,48 @@
 # NSE EOD Database
 
-Survivorship-bias-free NSE equity history (2005 → today): daily OHLCV + delivery,
-corporate-action adjusted, one Parquet file per security. Logic derived from
-[eod2](https://github.com/BennyThadikaran/eod2) (GPL-3, see LICENSE).
+A local, survivorship-bias-free end-of-day database of NSE (National Stock Exchange of India)
+equities, built for backtesting.
+
+* **Daily OHLCV + delivery data from 2005 to today**, one Parquet file per security
+* **Includes delisted stocks**, so backtests are not biased towards survivors
+* **Corporate-action adjusted** (splits, bonuses, consolidations, demergers) via a stored
+  `adj_factor`; unadjusted NSE prices are kept too
+* **Symbol changes resolved** by ISIN: old names still load (`INFOSYSTCH` → `INFY`)
+* **NSE indices** (OHLC, P/E, P/B, dividend yield) and **market breadth**
+* **Incremental sync**: one command downloads the NSE bhavcopy, delivery, index and
+  corporate-action reports for every day since the last run
+
+## Credits and inspiration
+
+This project is inspired by and derived from
+**[eod2](https://github.com/BennyThadikaran/eod2) by Benny Thadikaran**, which is licensed
+under the GNU GPL v3. The approach to downloading NSE reports, adjusting for corporate
+actions and analysing delivery follows eod2.
+
+Also based on Benny Thadikaran's work (both GPL v3):
+
+* [NseIndiaApi](https://github.com/BennyThadikaran/NseIndiaApi): NSE request headers and cookie handling
+* [eod2_utils](https://github.com/BennyThadikaran/eod2_utils): historical corporate-action seed data
+
+Many thanks to Benny Thadikaran for making these tools open source.
+
+## License
+
+Because it is derived from GPL v3 code, this project is also licensed under the
+**GNU General Public License v3.0**. See [LICENSE](LICENSE).
+
+Market data is published by NSE and remains subject to
+[NSE's terms of use](https://www.nseindia.com/terms-of-use).
+
+## Setup
+
+```powershell
+git clone https://github.com/ancap97/bhavcopyscrape.git
+cd bhavcopyscrape
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python sync.py
+```
 
 ## Use it in a backtest
 
@@ -50,6 +90,9 @@ Notes
 
 Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv`, then sync.
 
+**Using more than one computer:** run `git pull` before syncing, and commit + `git push`
+after. Don't sync on two machines without pulling in between — the Parquet files can't be merged.
+
 ## Layout
 
 ```
@@ -58,10 +101,11 @@ sync.py          update entrypoint        healthcheck.py  status check
 config.py scraper.py parsers.py symbol_master.py storage.py adjuster.py breadth.py pipeline.py   (sync internals)
 data/store/      one Parquet per security (unadjusted + adj_factor)
 data/indices/    NSE indices             data/breadth/  market breadth
-data/actions/    corporate actions       data/raw/      downloaded NSE reports (sync needs these)
-data/meta.json   sync state              data/logs/     sync log + status
+data/actions/    corporate actions       data/raw/      downloaded NSE reports (not in repo)
+data/meta.json   sync state              data/logs/     sync log + status (not in repo)
 ```
 
 `data/raw/` and `data/logs/` are not in the repo (too large / machine-local). Sync does not need
 the old raw files: it continues from `last_synced` in `data/meta.json` and downloads new days.
+On a fresh clone, `healthcheck.py` reports "needs attention" until the first sync.
 The full-rebuild tooling (bootstrap, validation, dashboard, tests) has been removed — back up `data/`.
