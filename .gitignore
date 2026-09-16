@@ -1,0 +1,10 @@
+# Raw NSE downloads (3+ GB) - sync re-downloads what it needs
+data/raw/
+
+# Local runtime logs
+data/logs/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
