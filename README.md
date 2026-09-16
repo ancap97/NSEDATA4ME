@@ -32,7 +32,7 @@ Because it is derived from GPL v3 code, this project is also licensed under the
 **GNU General Public License v3.0**. See [LICENSE](LICENSE).
 
 Market data is published by NSE and remains subject to
-[NSE's terms of use](https://www.nseindia.com/terms-of-use).
+[NSE's terms of use](https://www.nseindia.com/static/nse-terms-of-use).
 
 ## Setup
 
