@@ -37,8 +37,8 @@ Market data is published by NSE and remains subject to
 ## Setup
 
 ```powershell
-git clone https://github.com/ancap97/bhavcopyscrape.git
-cd bhavcopyscrape
+git clone https://github.com/ancap97/NSEDATA4ME.git
+cd NSEDATA4ME
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 .venv\Scripts\python sync.py
