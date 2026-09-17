@@ -334,6 +334,22 @@ def parse_pr_actions(zip_path: Path) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def bhav_filename(d: date) -> str:
+    from config import UDIFF_START_DATE
+
+    if d >= UDIFF_START_DATE:
+        return f"BhavCopy_NSE_CM_0_0_0_{d:%Y%m%d}_F_0000.csv"
+    return f"cm{d.strftime('%d%b%Y').upper()}bhav.csv"
+
+
+def delivery_filename(d: date) -> str:
+    return f"sec_bhavdata_full_{d:%d%m%Y}.csv"
+
+
+def mto_filename(d: date) -> str:
+    return f"MTO_{d:%d%m%Y}.DAT"
+
+
 def indices_filename(d: date) -> str:
     return f"ind_close_all_{d:%d%m%Y}.csv"
 
