@@ -1,0 +1,5 @@
+symbol,ex_date,type,factor,action,note
+SUNTV,2007-07-23,SPLIT,2.0,add,NSE text "Agm/Spl/Bon-1:1/Div-20%" omits the 10->5 split ratio; raw close 1758.75 -> 436.60 = 4.03x = bonus 1:1 x split 2
+GULFPETRO,2013-07-09,BONUS,2.210526,ignore,NSE "Bonus 23:19" is total:held notation here; price moved 1.2175x
+GULFPETRO,2013-07-09,BONUS,1.210526,add,23 shares for every 19 held = factor 23/19 (matches 1.2175x price move)
+ITC,2005-09-21,SPLIT,15.0,add,Bonus 1:2 (x1.5) and FV split Rs10->Re1 (x10) both ex 2005-09-21 = x15; NSE API/eod2 lack it; raw close 1929.6 -> 140.2
