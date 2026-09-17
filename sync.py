@@ -40,6 +40,7 @@ from adjuster import (
     save_actions,
     save_warnings,
 )
+from bootstrap import ensure_data
 from config import ADJ_WARNINGS_FILE, LOG_DIR, RECENT_DAYS_RETRY, SYNC_LOG_FILE, TZ_IN, ensure_dirs
 from pipeline import (
     backfill_delivery,
@@ -213,7 +214,10 @@ def run_sync(
     ensure_dirs()
     meta = load_meta()
     if not meta.get("last_synced"):
-        raise SystemExit("database not found under data/ - restore it from a backup")
+        raise SystemExit(
+            "database not found under data/ - run `python sync.py` (it fetches the snapshot "
+            "from the data branch) or restore it from a backup"
+        )
 
     store, istore = Store(), IndexStore()
     resolver = EntityResolver.load()
@@ -393,6 +397,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     ap = argparse.ArgumentParser(description="Incremental NSE EOD sync")
     ap.add_argument("--force", action="store_true", help="attempt today's reports even before 18:00 IST")
     ap.add_argument("--no-breadth", action="store_true", help="skip market breadth rebuild")
+    ap.add_argument("--no-fetch", action="store_true",
+                    help="do not fetch the data snapshot from the data branch when data/ is missing")
     ap.add_argument(
         "--redo-date", metavar="YYYY-MM-DD", default=None,
         help="re-download every report for one already-synced day and ingest it again "
@@ -400,6 +406,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     args = ap.parse_args(argv)
     redo = date.fromisoformat(args.redo_date) if args.redo_date else None
+
+    if not args.no_fetch:
+        ensure_data()  # fresh clone: pull the snapshot from the data branch, then sync on top
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(

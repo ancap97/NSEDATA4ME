@@ -14,37 +14,27 @@ equities, built for backtesting.
 
 ## Setup
 
-`main` holds only the code. The processed data (~430 MB) lives on the separate **`data` branch**,
-refreshed every week or two. You start from that snapshot and `sync.py` appends every trading day
-since it was taken, so the data is always up to date even if the branch is a few weeks old.
+```powershell
+git clone https://github.com/ancap97/NSEDATA4ME.git
+cd NSEDATA4ME
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python sync.py
+```
 
-1. **Clone and install:**
-   ```powershell
-   git clone https://github.com/ancap97/NSEDATA4ME.git
-   cd NSEDATA4ME
-   python -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   ```
-2. **Get the data snapshot** from the `data` branch into the repo root (it creates `data/`):
-   ```powershell
-   git fetch origin data --depth 1
-   git archive -o data.tar FETCH_HEAD
-   tar -xf data.tar
-   del data.tar
-   ```
-   Or download <https://github.com/ancap97/NSEDATA4ME/archive/refs/heads/data.zip> in a browser
-   and move the `data` folder out of the extracted `NSEDATA4ME-data\` folder into the repo, so
-   you end up with `NSEDATA4ME\data\store\...`.
-3. **Bring it up to date.**
-   ```powershell
-   .venv\Scripts\python sync.py
-   ```
-   Sync reads `last_synced` from `data/meta.json` in the snapshot and adds each missing day to
-   the Parquet files. Each day takes a few minutes, so a snapshot that is a week old takes
-   roughly half an hour. Run it again whenever you want new data (after 18:00 IST).
-4. **Check it** (optional): `.venv\Scripts\python healthcheck.py` exits 0 when the data is consistent.
+That's it. On the first run `sync.py` downloads the data snapshot (~430 MB, once) and then brings
+it up to today; afterwards the same command just adds the new days. Optionally check the result
+with `.venv\Scripts\python healthcheck.py` (exit code 0 = healthy).
 
-Nothing else is needed: sync does not rebuild history from scratch, so always start from the snapshot.
+**How the data is shipped:** `main` holds code only; the ~430 MB of Parquet lives on the separate
+**`data` branch**, refreshed every week or two. Sync starts from that snapshot and appends every
+trading day since it was taken, so you always end up current even if the branch is weeks old.
+Each day takes a few minutes to ingest, so a month-old snapshot means a longer first run.
+
+If you downloaded the repo as a zip instead of cloning it (no git remote to fetch from), get
+<https://github.com/ancap97/NSEDATA4ME/archive/refs/heads/data.zip> too and move the `data`
+folder out of the extracted `NSEDATA4ME-data\` folder into the repo, so you end up with
+`NSEDATA4ME\data\store\...`, then run `sync.py`.
 
 ## Use it in a backtest
 
@@ -106,7 +96,7 @@ Don't sync on two machines in between — the Parquet files can't be merged.
 ```
 loader.py        read API (import this)
 sync.py          update entrypoint        healthcheck.py  status check
-publish_data.py  refresh the data branch snapshot  (maintainer only)
+bootstrap.py     first-run snapshot fetch  publish_data.py  refresh the data branch (maintainer)
 config.py scraper.py parsers.py symbol_master.py storage.py adjuster.py breadth.py pipeline.py   (sync internals)
 data/store/      one Parquet per security (unadjusted + adj_factor)
 data/indices/    NSE indices             data/breadth/  market breadth
