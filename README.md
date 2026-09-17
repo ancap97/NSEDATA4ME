@@ -12,43 +12,37 @@ equities, built for backtesting.
 * **Incremental sync**: one command downloads the NSE bhavcopy, delivery, index and
   corporate-action reports for every day since the last run
 
-## Credits and inspiration
-
-This project is inspired by and derived from
-**[eod2](https://github.com/BennyThadikaran/eod2) by Benny Thadikaran**, which is licensed
-under the GNU GPL v3. The approach to downloading NSE reports, adjusting for corporate
-actions and analysing delivery follows eod2.
-
-Also based on Benny Thadikaran's work (both GPL v3):
-
-* [NseIndiaApi](https://github.com/BennyThadikaran/NseIndiaApi): NSE request headers and cookie handling
-* [eod2_utils](https://github.com/BennyThadikaran/eod2_utils): historical corporate-action seed data
-
-Many thanks to Benny Thadikaran for making these tools open source.
-
-## License
-
-Because it is derived from GPL v3 code, this project is also licensed under the
-**GNU General Public License v3.0**. See [LICENSE](LICENSE).
-
-Market data is published by NSE and remains subject to
-[NSE's terms of use](https://www.nseindia.com/static/nse-terms-of-use).
-
 ## Setup
 
-```powershell
-git clone https://github.com/ancap97/NSEDATA4ME.git
-cd NSEDATA4ME
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-gh release download data-latest -p nse-data.zip      # processed data (not stored in git)
-tar -xf nse-data.zip; del nse-data.zip
-.venv\Scripts\python sync.py                         # catch up from the snapshot's last_synced
-```
+The git repo holds only the code. The processed data (~430 MB) is published separately as
+`nse-data.zip` on the [`data-latest` release](https://github.com/ancap97/NSEDATA4ME/releases/tag/data-latest).
+You start from that snapshot and `sync.py` appends every trading day since it was made.
 
-The data is published as the `nse-data.zip` asset of the
-[`data-latest` release](https://github.com/ancap97/NSEDATA4ME/releases/tag/data-latest)
-(download it from the browser if you don't use the `gh` CLI, and extract it in the repo root).
+1. **Clone and install:**
+   ```powershell
+   git clone https://github.com/ancap97/NSEDATA4ME.git
+   cd NSEDATA4ME
+   python -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt
+   ```
+2. **Download the data snapshot and unzip it in the repo root.** It creates `data/`.
+   ```powershell
+   gh release download data-latest -p nse-data.zip
+   tar -xf nse-data.zip
+   del nse-data.zip
+   ```
+   Without the [GitHub CLI](https://cli.github.com/), download `nse-data.zip` from the release
+   page in a browser and extract it into the repo folder (so you get `NSEDATA4ME\data\store\...`).
+3. **Bring it up to date.**
+   ```powershell
+   .venv\Scripts\python sync.py
+   ```
+   Sync reads `last_synced` from `data/meta.json` in the snapshot and adds each missing day to
+   the unzipped Parquet files. Each day takes a few minutes, so a snapshot that is a week old
+   takes roughly half an hour. Run it again whenever you want new data (after 18:00 IST).
+4. **Check it** (optional): `.venv\Scripts\python healthcheck.py` exits 0 when the data is consistent.
+
+Nothing else is needed: sync does not rebuild history from scratch, so always start from the snapshot.
 
 ## Use it in a backtest
 
@@ -122,3 +116,12 @@ Only `data/actions/manual_overrides.csv` is in the repo. The processed data (`st
 `data/logs/` are machine-local and not published. Sync does not need the old raw files: it
 continues from `last_synced` in `data/meta.json` and downloads new days.
 The full-rebuild tooling (bootstrap, validation, dashboard, tests) has been removed — back up `data/`.
+
+## Credits and license
+
+Derived from [eod2](https://github.com/BennyThadikaran/eod2) and related projects by
+Benny Thadikaran (GPL v3), so this project is also licensed under the
+**GNU General Public License v3.0**. See [LICENSE](LICENSE).
+
+Market data is published by NSE and remains subject to
+[NSE's terms of use](https://www.nseindia.com/static/nse-terms-of-use).
