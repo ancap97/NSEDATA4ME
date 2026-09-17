@@ -25,14 +25,17 @@ You start from that snapshot and `sync.py` appends every trading day since it wa
    python -m venv .venv
    .venv\Scripts\pip install -r requirements.txt
    ```
-2. **Download the data snapshot and unzip it in the repo root.** It creates `data/`.
+2. **Download the data snapshot and unzip it in the repo root.** It arrives as several
+   `nse-data-NN.zip` parts; extract them all and you get `data/`.
    ```powershell
-   gh release download data-latest -p nse-data.zip
-   tar -xf nse-data.zip
-   del nse-data.zip
+   gh release download data-latest -p "nse-data-*.zip"
+   Get-ChildItem nse-data-*.zip | ForEach-Object { tar -xf $_ }
+   del nse-data-*.zip
    ```
-   Without the [GitHub CLI](https://cli.github.com/), download `nse-data.zip` from the release
-   page in a browser and extract it into the repo folder (so you get `NSEDATA4ME\data\store\...`).
+   Without the [GitHub CLI](https://cli.github.com/), download every `nse-data-NN.zip` from the
+   release page in a browser and extract them into the repo folder (so you get
+   `NSEDATA4ME\data\store\...`). The parts are independent: each holds whole files, so there is
+   nothing to join.
 3. **Bring it up to date.**
    ```powershell
    .venv\Scripts\python sync.py
@@ -92,8 +95,13 @@ Notes
 Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked in git), then sync.
 
 **Why the data is not in git:** every sync rewrites thousands of compressed Parquet files, and git
-would keep a full ~400 MB copy per commit. `publish_data.py` replaces the single release asset
-instead, so nothing accumulates.
+would keep a full ~400 MB copy per commit. `publish_data.py` replaces the release assets instead,
+so nothing accumulates.
+
+**Why the snapshot is split into ~120 MB parts:** uploading the whole 430 MB zip to
+`uploads.github.com` was aborted mid-transfer every time ("Send failure: Connection was aborted",
+after ~200 MB), while parts of this size go through. For the same reason `publish_data.py`
+uploads with `curl -T` (streaming, line speed) instead of `gh release upload` (~1 Mbit/s here).
 
 **Using more than one computer:** download the latest snapshot before syncing, and run
 `publish_data.py` after. Don't sync on two machines in between — the Parquet files can't be merged.
