@@ -18,7 +18,6 @@ Formats handled
 from __future__ import annotations
 
 import csv
-import io
 import re
 import zipfile
 from datetime import date, datetime
@@ -335,60 +334,9 @@ def parse_pr_actions(zip_path: Path) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def parse_pr_mcap_universe(zip_path: Path) -> Optional[pd.DataFrame]:
-    """Listed/permitted equity universe from the MCAP file in a PR zip."""
-    try:
-        zf = zipfile.ZipFile(zip_path)
-    except zipfile.BadZipFile:
-        return None
-    with zf:
-        name = next((n for n in zf.namelist() if "mcap" in n.lower() and n.lower().endswith(".csv")), None)
-        if name is None or zf.getinfo(name).file_size == 0:
-            return None
-        raw = zf.read(name).decode("utf-8", errors="replace")
-    df = _clean_columns(pd.read_csv(io.StringIO(raw), dtype=str))
-    if not {"Symbol", "Series", "Category"}.issubset(df.columns):
-        return None
-    df["Series"] = df["Series"].str.strip()
-    df["Category"] = df["Category"].str.strip()
-    df = df[df["Series"].isin(("EQ", "BE", "BZ")) & df["Category"].isin(("Listed", "Permitted"))]
-    return df[["Symbol", "Series", "Category"]].rename(columns=str.lower).reset_index(drop=True)
-
-
-# --------------------------------------------------------------------------- #
-# Helpers for file naming
-# --------------------------------------------------------------------------- #
-
-
-def bhav_filename(d: date) -> str:
-    from config import UDIFF_START_DATE
-
-    if d >= UDIFF_START_DATE:
-        return f"BhavCopy_NSE_CM_0_0_0_{d:%Y%m%d}_F_0000.csv"
-    return f"cm{d.strftime('%d%b%Y').upper()}bhav.csv"
-
-
-def delivery_filename(d: date) -> str:
-    return f"sec_bhavdata_full_{d:%d%m%Y}.csv"
-
-
-def mto_filename(d: date) -> str:
-    return f"MTO_{d:%d%m%Y}.DAT"
-
-
 def indices_filename(d: date) -> str:
     return f"ind_close_all_{d:%d%m%Y}.csv"
 
 
 def pr_filename(d: date) -> str:
     return f"PR{d:%d%m%y}.zip"
-
-
-def date_from_bhav_filename(name: str) -> Optional[date]:
-    m = re.match(r"BhavCopy_NSE_CM_0_0_0_(\d{8})_F_0000\.csv$", name)
-    if m:
-        return datetime.strptime(m.group(1), "%Y%m%d").date()
-    m = re.match(r"cm(\d{2}[A-Z]{3}\d{4})bhav\.csv$", name)
-    if m:
-        return datetime.strptime(m.group(1), "%d%b%Y").date()
-    return None

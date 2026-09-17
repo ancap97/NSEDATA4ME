@@ -81,10 +81,6 @@ def make_key(symbol: str, series: str) -> str:
     return f"{symbol}_SME" if series in SME_SERIES else symbol
 
 
-def key_to_filename(key: str) -> str:
-    return key.lower()
-
-
 class EntityResolver:
     """Stateful resolver, fed with daily bhavcopy rows in chronological order."""
 

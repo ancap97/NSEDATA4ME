@@ -4,7 +4,6 @@ Sources merged into data/actions/actions.parquet (priority high -> low):
   manual  data/actions/manual_overrides.csv  (user corrections)
   api     NSE corporate-actions API           (forward daily sync)
   pr      bc*.csv inside NSE PR bhavcopy zips (2011+, includes delisted names)
-  seed    seed/eod2_actions.db                (eod2_utils SQLite, 1996+)
 
 Purpose text parsing (split/bonus/consolidation regexes, exclusions for
 debenture/preference/NCRPS/DVR bonuses, PR-text normalisation) is copied from
@@ -25,7 +24,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -41,9 +39,7 @@ from config import (
     ADJ_CHECK_LOW,
     ADJ_WARNINGS_FILE,
     MANUAL_OVERRIDES_FILE,
-    SEED_ACTIONS_DB,
     SME_SERIES,
-    TZ_IN,
 )
 from parsers import parse_pr_actions
 from storage import Store
@@ -233,33 +229,6 @@ def _hash(key: str, ex_date: str, typ: str, factor) -> str:
 # ------------------------------------------------------------------ sources
 
 
-def load_seed_actions(db_path: Path = SEED_ACTIONS_DB) -> pd.DataFrame:
-    """eod2_utils SQLite actions (symbol as of 2025, exDate as IST epoch)."""
-    if not db_path.exists():
-        logger.warning("seed actions db not found: %s", db_path)
-        return pd.DataFrame(columns=["symbol", "series", "ex_date", "rec_date", "purpose", "source"])
-    con = sqlite3.connect(db_path)
-    try:
-        rows = con.execute(
-            "SELECT s.name, a.subject, a.exDate, a.recDate FROM Actions a JOIN Stocks s ON s.id = a.stock_id "
-            "WHERE a.exDate IS NOT NULL"
-        ).fetchall()
-    finally:
-        con.close()
-
-    def ts(v):
-        if v is None or pd.isna(v):
-            return pd.NaT
-        return pd.Timestamp(datetime.fromtimestamp(float(v), tz=TZ_IN).date())
-
-    df = pd.DataFrame(rows, columns=["symbol", "purpose", "ex", "rec"])
-    df["ex_date"] = df["ex"].map(ts)
-    df["rec_date"] = df["rec"].map(ts)
-    df["series"] = "EQ"
-    df["source"] = "seed"
-    return df[["symbol", "series", "ex_date", "rec_date", "purpose", "source"]]
-
-
 def _pr_zip_date(p: Path):
     try:
         return pd.Timestamp(datetime.strptime(p.name[2:8], "%d%m%y").date())
@@ -406,7 +375,6 @@ def _resolve_keys(df: pd.DataFrame, resolver: EntityResolver) -> pd.Series:
     return pd.Series(keys, index=df.index, dtype="object")
 
 
-INFERRED_FILE = ACTIONS_DIR / "inferred_actions.csv"
 
 
 def _candidate_ratios() -> List[Tuple[float, int, str]]:
@@ -458,115 +426,6 @@ def _snap_inferred(r_est: float, disagreement: float) -> Tuple[float, str, str]:
         alts = ", ".join(f"{w[3]} ({w[2]:.4g})" for w in combo[:3])
         return round(r_est, 4), "low", f"combo candidates: {alts}"
     return round(r_est, 4), "low", "unsnapped (no simple ratio within tolerance)"
-
-
-def infer_actions_from_prices(
-    store: Store,
-    actions: pd.DataFrame,
-    until: pd.Timestamp = pd.Timestamp("2011-06-21"),
-    min_ratio: float = 1.8,
-    keys: Optional[Iterable[str]] = None,
-    since: Optional[pd.Timestamp] = None,
-    apply_low: bool = True,
-    report_file: Path = INFERRED_FILE,
-) -> pd.DataFrame:
-    """Recover splits/bonuses that no announcement source covers (NSE's API
-    does not return most pre-2011 actions and PR zips start in June 2011).
-
-    A day t qualifies when
-      * raw close[t-1]/close[t] (or its inverse) >= min_ratio, gap <= 6 days,
-        both closes >= Rs 1, no adjusting action within +-10 days;
-      * the level shift persists: 6-day medians before/after agree within 12%;
-      * the ex-day never traded near the old level (high[t] <= old/f*1.25) and
-        the previous day never near the new level - a crash trades through the
-        old level intraday, a split opens at the new level.
-    The factor is estimated from the ex-day open and close (geometric mean)
-    and snapped to a simple split/bonus/combo ratio; ambiguous cases keep the
-    measured ratio and are marked low confidence. Everything is written to
-    actions/inferred_actions.csv for review.
-    """
-    adj = actions[actions["type"].isin(ADJUSTING_TYPES) & actions["key"].notna()]
-    known: Dict[str, np.ndarray] = {k: g["ex_date"].to_numpy(dtype="datetime64[D]") for k, g in adj.groupby("key")}
-    rows: List[dict] = []
-    report: List[dict] = []
-    keys = list(keys) if keys is not None else store.list_keys()
-    for key in keys:
-        df = store.read(key, columns=["date", "open", "high", "low", "close"])
-        df = df[df["date"] <= until]
-        if len(df) < 15:
-            continue
-        d = df["date"].to_numpy(dtype="datetime64[D]")
-        c = df["close"].to_numpy(dtype="float64")
-        o = df["open"].to_numpy(dtype="float64")
-        h = df["high"].to_numpy(dtype="float64")
-        lo = df["low"].to_numpy(dtype="float64")
-        gap = np.diff(d).astype(int)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            r = c[:-1] / c[1:]
-        cand = np.isfinite(r) & ((r >= min_ratio) | (r <= 1 / min_ratio)) & (gap <= 6) & (c[:-1] >= 1) & (c[1:] >= 1)
-        if since is not None:
-            cand &= d[1:] >= np.datetime64(since, "D")
-        for j in np.flatnonzero(cand):
-            t = j + 1
-            if t < 6 or t + 4 > len(c):
-                continue
-            kd = known.get(key)
-            if kd is not None and (np.abs((kd - d[t]).astype(int)) <= 10).any():
-                continue
-            r_close = r[j]
-            r_open = c[t - 1] / o[t] if np.isfinite(o[t]) and o[t] > 0 else r_close
-            disagreement = abs(np.log(r_open / r_close))
-            # the new level must persist (a one-day glitch reverts); post-event rallies are allowed
-            r2 = np.median(c[max(0, t - 6) : t]) / np.median(c[t : min(len(c), t + 6)])
-            r_next = c[t - 1] / np.median(c[t + 1 : t + 4])
-            # ex-day open and close usually agree; when they do not (thin opening print) trust
-            # the one closer to the level the stock settled at over the next days
-            if disagreement <= 0.05:
-                r_est = float(np.exp(0.5 * (np.log(r_open) + np.log(r_close))))
-            else:
-                r_est = float(min((r_open, r_close), key=lambda x: abs(np.log(x / r_next))))
-            if abs(np.log(r2) - np.log(r_est)) > 0.30 or abs(np.log(r_next) - np.log(r_est)) > 0.30:
-                continue
-            f, conf, label = _snap_inferred(r_est, disagreement)
-            if conf == "low" and not apply_low:
-                continue
-            old, new = c[t - 1], c[t - 1] / f
-            # a split opens at the new level; a crash trades through the old level intraday
-            if f > 1:
-                if h[t] > new * 1.35 or lo[t - 1] < new * 1.35:
-                    continue
-            else:  # consolidation: price jumps up
-                if lo[t] < old * 1.35 or h[t - 1] > new / 1.35:
-                    continue
-            typ = "CONSOLIDATION" if f < 1 else ("BONUS" if label.startswith("bonus") else "SPLIT")
-            ex = pd.Timestamp(d[t])
-            purpose = f"inferred from price move: close {c[t-1]:g} -> open {o[t]:g} / close {c[t]:g}; {label}; confidence {conf}"
-            rows.append(
-                {
-                    "key": key, "symbol": key.replace("_SME", ""), "ex_date": ex, "rec_date": pd.NaT, "type": typ,
-                    "factor": f, "amount": np.nan, "purpose": purpose, "source": "price",
-                    "hash": _hash(key, ex.strftime("%Y-%m-%d"), typ, round(f, 6)),
-                }
-            )
-            report.append(
-                {
-                    "key": key, "ex_date": ex.date().isoformat(), "factor": f, "confidence": conf, "label": label,
-                    "r_open": round(r_open, 4), "r_close": round(r_close, 4), "r_median6": round(r2, 4),
-                    "prev_close": c[t - 1], "open": o[t], "close": c[t],
-                }
-            )
-    out = pd.DataFrame(rows, columns=ACTION_COLUMNS)
-    ACTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(report).to_csv(report_file, index=False)
-    if report:
-        counts = pd.Series([r["confidence"] for r in report]).value_counts().to_dict()
-    else:
-        counts = {}
-    logger.warning(
-        "%d corporate actions inferred from price moves %s..%s %s (%s)",
-        len(out), since.date() if since is not None else "start", until.date(), counts, report_file.name,
-    )
-    return out
 
 
 def reconcile_ex_dates(actions: pd.DataFrame, store: Store, window: int = 25, tol: float = 0.15) -> pd.DataFrame:
@@ -797,23 +656,6 @@ def _drop_near_duplicates(df: pd.DataFrame, window_days: int = 35, factor_tol: f
 
 
 # ratios real corporate actions produce (splits, consolidations, bonuses)
-_NICE_RATIOS = np.array(sorted(
-    {a / b for a in (1, 2, 3, 4, 5, 10, 20, 25, 50, 100) for b in (1, 2, 3, 4, 5, 10, 20, 25, 50, 100)}
-    | {1 + a / b for a in range(1, 21) for b in range(1, 21)}
-    | {1 + a / b for a in (1, 2, 3, 4, 5) for b in (25, 30, 40, 50, 100)}
-    - {1.0}
-))
-
-
-def snap_factor(f: float, tol: float = 0.015) -> Tuple[float, bool]:
-    """Snap a measured price ratio to the nearest plausible action ratio."""
-    i = int(np.argmin(np.abs(np.log(_NICE_RATIOS) - np.log(f))))
-    cand = float(_NICE_RATIOS[i])
-    if abs(np.log(cand / f)) <= tol:
-        return cand, True
-    return float(f), False
-
-
 _FACE_VALUES = (1, 2, 4, 5, 10, 100)
 _SPLIT_RATIOS = np.array(sorted({a / b for a in _FACE_VALUES for b in _FACE_VALUES if a != b}))
 _BONUS_RATIOS = np.array(sorted({1 + a / b for a in range(1, 11) for b in range(1, 11)}))

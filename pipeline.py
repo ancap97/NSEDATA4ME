@@ -18,7 +18,6 @@ from config import (
     PE_ALERT_LOW,
     PE_ALERTS_FILE,
     SEC_FULL_START_DATE,
-    START_DATE,
     TZ_IN,
 )
 from parsers import merge_delivery, parse_bhav, parse_delivery_full, parse_indices, parse_mto
@@ -36,24 +35,6 @@ def _noop(stage: str, i: int, n: int, msg: str) -> None:
 
 
 # ------------------------------------------------------------------ calendar helpers
-
-
-def available_trade_dates(start: date = START_DATE, end: Optional[date] = None) -> List[date]:
-    """Dates for which a raw bhavcopy exists on disk (the authoritative
-    historical trading calendar)."""
-    from parsers import date_from_bhav_filename
-    from config import RAW_DIR
-
-    end = end or date.today()
-    out = []
-    for year_dir in sorted((RAW_DIR / "bhav").glob("*")):
-        if not year_dir.is_dir():
-            continue
-        for p in year_dir.iterdir():
-            d = date_from_bhav_filename(p.name)
-            if d and start <= d <= end and p.stat().st_size > 0:
-                out.append(d)
-    return sorted(set(out))
 
 
 def holiday_key(d: date) -> str:

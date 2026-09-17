@@ -41,7 +41,7 @@ from adjuster import (
     save_warnings,
 )
 from bootstrap import ensure_data
-from config import ADJ_WARNINGS_FILE, LOG_DIR, RECENT_DAYS_RETRY, SYNC_LOG_FILE, TZ_IN, ensure_dirs
+from config import ADJ_WARNINGS_FILE, LOG_DIR, SYNC_LOG_FILE, TZ_IN, ensure_dirs
 from pipeline import (
     backfill_delivery,
     candidate_dates,

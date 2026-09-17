@@ -6,7 +6,7 @@ Layout (all under DATA_DIR):
   indices/        one Parquet file per NSE index (from ind_close_all reports)
   actions/        corporate actions table (Parquet + CSV) and manual overrides
   breadth/        market breadth time series
-  logs/           sync log, failed dates, adjustment warnings, diagnostics
+  logs/           sync log, failed dates, adjustment warnings
   meta.json       sync state, per-symbol last dates, holidays
 """
 
@@ -24,7 +24,6 @@ INDEX_DIR = DATA_DIR / "indices"
 ACTIONS_DIR = DATA_DIR / "actions"
 BREADTH_DIR = DATA_DIR / "breadth"
 LOG_DIR = DATA_DIR / "logs"
-SEED_DIR = ROOT_DIR / "seed"
 
 META_FILE = DATA_DIR / "meta.json"
 SYMBOL_MASTER_FILE = DATA_DIR / "symbol_master.parquet"
@@ -36,22 +35,14 @@ BREADTH_FILE = BREADTH_DIR / "breadth.parquet"
 FAILED_DATES_FILE = LOG_DIR / "failed_dates.csv"
 MISSING_DATES_FILE = LOG_DIR / "missing_dates.json"
 ADJ_WARNINGS_FILE = LOG_DIR / "adjustment_warnings.csv"
-DIAGNOSTICS_FILE = LOG_DIR / "diagnostics.csv"
 PE_ALERTS_FILE = LOG_DIR / "pe_alerts.csv"
 SYNC_LOG_FILE = LOG_DIR / "sync.log"
 
-# Seed data shipped with the project (copied from BennyThadikaran/eod2_utils, GPL-3)
-SEED_ACTIONS_DB = SEED_DIR / "eod2_actions.db"
 
-START_DATE = date(2005, 1, 1)
-# Old bhavcopy CSV carries ISIN + TOTALTRADES from this date onward
-ISIN_START_DATE = date(2011, 6, 22)
 # NSE switched equity bhavcopy to the CM-UDiFF format on this date
 UDIFF_START_DATE = date(2024, 7, 8)
 # sec_bhavdata_full delivery report is only available from here; MTO before that
 SEC_FULL_START_DATE = date(2019, 1, 1)
-# PR bhavcopy zips (corporate action file) available from here
-PR_START_DATE = date(2011, 6, 22)
 
 TZ_IN = ZoneInfo("Asia/Kolkata")
 
@@ -81,10 +72,6 @@ ADJ_CHECK_HIGH = 1.5
 # Nifty PE alert thresholds
 PE_ALERT_LOW = 20.0
 PE_ALERT_HIGH = 25.0
-
-# Delivery analysis defaults (mirrors eod2 dget.py)
-DLV_AVG_LEN = 30
-DLV_L1, DLV_L2, DLV_L3 = 1.0, 1.5, 2.0
 
 NSE_HOME = "https://www.nseindia.com"
 NSE_API = "https://www.nseindia.com/api"

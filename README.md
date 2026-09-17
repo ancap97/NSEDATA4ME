@@ -69,7 +69,7 @@ Notes
 * `symbol` is the current symbol; old names resolve (`load_symbol("INFOSYSTCH")`).
 * Use `close.shift(1)` for returns, not `prev_close` (NSE's reference price).
 * `trades` exists from 2011-06-22; delivery from 2005.
-* Loading all ~symbols reads thousands of files — pass `start_date`/`columns` and cache the result (e.g. `px.to_parquet(...)`) in your own project.
+* Loading every symbol reads ~4,500 files — pass `start_date`/`columns` and cache the result (e.g. `px.to_parquet(...)`) in your own project.
 
 ## Update
 
@@ -95,7 +95,7 @@ Don't sync on two machines in between — the Parquet files can't be merged.
 
 ```
 loader.py        read API (import this)
-sync.py          update entrypoint        healthcheck.py  status check
+sync.py          update entrypoint        healthcheck.py   status check
 bootstrap.py     first-run snapshot fetch  publish_data.py  refresh the data branch (maintainer)
 config.py scraper.py parsers.py symbol_master.py storage.py adjuster.py breadth.py pipeline.py   (sync internals)
 data/store/      one Parquet per security (unadjusted + adj_factor)
@@ -108,7 +108,8 @@ On `main` only `data/actions/manual_overrides.csv` is tracked. The processed dat
 `indices`, `actions`, `breadth`, `meta.json`, symbol maps) comes from the `data` branch;
 `data/raw/` and `data/logs/` are machine-local and never published. Sync does not need the old
 raw files: it continues from `last_synced` in `data/meta.json` and downloads new days.
-The full-rebuild tooling (bootstrap, validation, dashboard, tests) has been removed — back up `data/`.
+There is no tooling to rebuild the database from scratch (it was removed): the `data` branch
+snapshot is the starting point, so keep a backup of `data/` if you care about your local copy.
 
 ## Credits and license
 

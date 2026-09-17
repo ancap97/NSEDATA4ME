@@ -19,9 +19,9 @@ import logging
 import random
 import time
 import zipfile
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import requests
 
@@ -320,38 +320,3 @@ class NSEClient:
 
     def close(self) -> None:
         self.session.close()
-
-
-def download_range(
-    client: NSEClient,
-    kinds: List[str],
-    dates: List[date],
-    progress: Optional[Callable[[int, int, str], None]] = None,
-    stop_on_error: bool = False,
-) -> Dict[str, int]:
-    """Bulk resume-safe downloader for a list of dates."""
-    total = len(dates)
-    for i, d in enumerate(dates, 1):
-        for kind in kinds:
-            try:
-                if kind == "delivery":
-                    client.download_delivery(d)
-                else:
-                    client.download_report(kind, d)
-            except Exception as e:
-                logger.warning("%s %s failed: %s", kind, d, e)
-                if stop_on_error:
-                    raise
-        if progress:
-            progress(i, total, f"{d}")
-    return dict(client.stats)
-
-
-def weekdays(start: date, end: date) -> List[date]:
-    out = []
-    d = start
-    while d <= end:
-        if d.weekday() < 5:
-            out.append(d)
-        d += timedelta(days=1)
-    return out
