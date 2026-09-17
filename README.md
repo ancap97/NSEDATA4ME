@@ -14,9 +14,9 @@ equities, built for backtesting.
 
 ## Setup
 
-The git repo holds only the code. The processed data (~430 MB) is published separately as
-`nse-data.zip` on the [`data-latest` release](https://github.com/ancap97/NSEDATA4ME/releases/tag/data-latest).
-You start from that snapshot and `sync.py` appends every trading day since it was made.
+`main` holds only the code. The processed data (~430 MB) lives on the separate **`data` branch**,
+refreshed every week or two. You start from that snapshot and `sync.py` appends every trading day
+since it was taken, so the data is always up to date even if the branch is a few weeks old.
 
 1. **Clone and install:**
    ```powershell
@@ -25,24 +25,23 @@ You start from that snapshot and `sync.py` appends every trading day since it wa
    python -m venv .venv
    .venv\Scripts\pip install -r requirements.txt
    ```
-2. **Download the data snapshot and unzip it in the repo root.** It arrives as several
-   `nse-data-NN.zip` parts; extract them all and you get `data/`.
+2. **Get the data snapshot** from the `data` branch into the repo root (it creates `data/`):
    ```powershell
-   gh release download data-latest -p "nse-data-*.zip"
-   Get-ChildItem nse-data-*.zip | ForEach-Object { tar -xf $_ }
-   del nse-data-*.zip
+   git fetch origin data --depth 1
+   git archive -o data.tar FETCH_HEAD
+   tar -xf data.tar
+   del data.tar
    ```
-   Without the [GitHub CLI](https://cli.github.com/), download every `nse-data-NN.zip` from the
-   release page in a browser and extract them into the repo folder (so you get
-   `NSEDATA4ME\data\store\...`). The parts are independent: each holds whole files, so there is
-   nothing to join.
+   Or download <https://github.com/ancap97/NSEDATA4ME/archive/refs/heads/data.zip> in a browser
+   and move the `data` folder out of the extracted `NSEDATA4ME-data\` folder into the repo, so
+   you end up with `NSEDATA4ME\data\store\...`.
 3. **Bring it up to date.**
    ```powershell
    .venv\Scripts\python sync.py
    ```
    Sync reads `last_synced` from `data/meta.json` in the snapshot and adds each missing day to
-   the unzipped Parquet files. Each day takes a few minutes, so a snapshot that is a week old
-   takes roughly half an hour. Run it again whenever you want new data (after 18:00 IST).
+   the Parquet files. Each day takes a few minutes, so a snapshot that is a week old takes
+   roughly half an hour. Run it again whenever you want new data (after 18:00 IST).
 4. **Check it** (optional): `.venv\Scripts\python healthcheck.py` exits 0 when the data is consistent.
 
 Nothing else is needed: sync does not rebuild history from scratch, so always start from the snapshot.
@@ -89,29 +88,25 @@ Notes
 .venv\Scripts\python sync.py --force                  # try today before 18:00
 .venv\Scripts\python sync.py --redo-date 2026-09-04   # re-download + re-ingest one day
 .venv\Scripts\python healthcheck.py                   # status; exit 1 = needs attention
-.venv\Scripts\python publish_data.py                  # zip data/ and replace the release asset
+.venv\Scripts\python publish_data.py --push           # refresh the data branch (maintainer)
 ```
 
-Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked in git), then sync.
+Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked on `main`), then sync.
 
-**Why the data is not in git:** every sync rewrites thousands of compressed Parquet files, and git
-would keep a full ~400 MB copy per commit. `publish_data.py` replaces the release assets instead,
-so nothing accumulates.
+**Why data is not on `main`:** every sync rewrites thousands of compressed Parquet files, so each
+data commit would add ~400 MB of history that git can never reuse. `publish_data.py` writes a
+fresh parentless commit on the `data` branch and force-pushes it, replacing the previous snapshot
+instead of stacking on it, so the repo stays about one snapshot in size.
 
-**Why the snapshot is split into ~120 MB parts:** uploading the whole 430 MB zip to
-`uploads.github.com` was aborted mid-transfer every time ("Send failure: Connection was aborted",
-after ~200 MB), while parts of this size go through. For the same reason `publish_data.py`
-uploads with `curl -T` (streaming, line speed) instead of `gh release upload` (~1 Mbit/s here).
-
-**Using more than one computer:** download the latest snapshot before syncing, and run
-`publish_data.py` after. Don't sync on two machines in between — the Parquet files can't be merged.
+**Using more than one computer:** take the snapshot before syncing, and refresh the branch after.
+Don't sync on two machines in between — the Parquet files can't be merged.
 
 ## Layout
 
 ```
 loader.py        read API (import this)
 sync.py          update entrypoint        healthcheck.py  status check
-publish_data.py  upload data snapshot to the data-latest release
+publish_data.py  refresh the data branch snapshot  (maintainer only)
 config.py scraper.py parsers.py symbol_master.py storage.py adjuster.py breadth.py pipeline.py   (sync internals)
 data/store/      one Parquet per security (unadjusted + adj_factor)
 data/indices/    NSE indices             data/breadth/  market breadth
@@ -119,10 +114,10 @@ data/actions/    corporate actions       data/raw/      downloaded NSE reports
 data/meta.json   sync state              data/logs/     sync log + status
 ```
 
-Only `data/actions/manual_overrides.csv` is in the repo. The processed data (`store`, `indices`,
-`actions`, `breadth`, `meta.json`, symbol maps) comes from the release zip; `data/raw/` and
-`data/logs/` are machine-local and not published. Sync does not need the old raw files: it
-continues from `last_synced` in `data/meta.json` and downloads new days.
+On `main` only `data/actions/manual_overrides.csv` is tracked. The processed data (`store`,
+`indices`, `actions`, `breadth`, `meta.json`, symbol maps) comes from the `data` branch;
+`data/raw/` and `data/logs/` are machine-local and never published. Sync does not need the old
+raw files: it continues from `last_synced` in `data/meta.json` and downloads new days.
 The full-rebuild tooling (bootstrap, validation, dashboard, tests) has been removed — back up `data/`.
 
 ## Credits and license

@@ -1,5 +1,5 @@
-# Generated data is not versioned: publish it with `python publish_data.py`
-# (GitHub Release asset) and restore it from there. Only hand-edited inputs are tracked.
+# Generated data is kept off main: `python publish_data.py` puts it on the `data` branch
+# instead (it force-adds these paths). Only hand-edited inputs are tracked here.
 /data/*
 !/data/actions/
 /data/actions/*
