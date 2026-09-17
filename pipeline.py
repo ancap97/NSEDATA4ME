@@ -138,7 +138,12 @@ def _alias_map(renames: List[Tuple[str, str]]) -> Dict[str, str]:
     return alias
 
 
-def commit_batch(store: Store, frames: List[pd.DataFrame], renames: List[Tuple[str, str]]) -> List[str]:
+def commit_batch(
+    store: Store,
+    frames: List[pd.DataFrame],
+    renames: List[Tuple[str, str]],
+    progress: Callable[[int, int, str], None] = lambda i, n, key: None,
+) -> List[str]:
     """Apply file renames, then append rows grouped by final key. Returns keys touched."""
     for old, new in renames:
         store.rename(old, new)
@@ -149,9 +154,11 @@ def commit_batch(store: Store, frames: List[pd.DataFrame], renames: List[Tuple[s
     if alias:
         big["key"] = big["key"].map(lambda k: alias.get(k, k))
     touched = []
-    for key, grp in big.groupby("key", sort=False):
+    groups = big.groupby("key", sort=False)
+    for i, (key, grp) in enumerate(groups, 1):
         store.append(key, grp.drop(columns="key"))
         touched.append(key)
+        progress(i, groups.ngroups, key)
     return touched
 
 
@@ -200,14 +207,15 @@ def ingest_dates(
                 index_frames.append(idx)
             stats["days"] += 1
             stats["rows"] += len(df)
-            if done % 25 == 0 or done == n:
-                progress("ingest", done, n, f"{d} parsed")
+            progress("ingest", done, n, f"{d} parsed")
 
         keys_in_batch = sorted({k for f in frames for k in f["key"].unique()}) if frames else []
         if before_commit:
             before_commit(batch, keys_in_batch)
-        progress("commit", done, n, f"writing {len(keys_in_batch)} securities for {batch[0]}..{batch[-1]}")
-        touched = commit_batch(store, frames, renames)
+        label = f"{batch[0]}" if len(batch) == 1 else f"{batch[0]}..{batch[-1]}"
+        touched = commit_batch(
+            store, frames, renames, progress=lambda i, m, key: progress("commit", i, m, f"{label} {key}"),
+        )
         stats["renames"] += len(renames)
         if index_frames:
             index_store.append_day(pd.concat(index_frames, ignore_index=True))

@@ -1,6 +1,7 @@
-# read (backtests): pandas, pyarrow, numpy   |   update (sync.py): + requests, python-dateutil
+# read (backtests): pandas, pyarrow, numpy   |   update (sync.py): + requests, python-dateutil, tqdm
 pandas>=2.2
 pyarrow>=15
 numpy>=1.26
 requests>=2.31
 python-dateutil>=2.9
+tqdm>=4.66

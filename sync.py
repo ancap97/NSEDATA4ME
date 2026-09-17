@@ -29,6 +29,8 @@ from datetime import date, datetime, timedelta
 from typing import Callable, Dict, List, Optional
 
 import pandas as pd
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from adjuster import (
     ADJUSTING_TYPES,
@@ -63,9 +65,34 @@ ProgressFn = Callable[[str, int, int, str], None]
 SYNC_STATUS_FILE = LOG_DIR / "last_sync_status.json"
 
 
-def _print_progress(stage: str, i: int, n: int, msg: str) -> None:
-    pct = f"{i / n * 100:5.1f}%" if n else "     "
-    print(f"[{stage:8s}] {pct} {i}/{n} {msg}", flush=True)
+class TqdmProgress:
+    """ProgressFn drawing one tqdm bar per stage; a bar closes once it reaches its total.
+
+    Per-day "commit" bars are transient so only the stage summaries stay on screen."""
+
+    TRANSIENT = {"commit"}
+
+    def __init__(self) -> None:
+        self._bars: Dict[str, tqdm] = {}
+
+    def __call__(self, stage: str, i: int, n: int, msg: str) -> None:
+        bar = self._bars.get(stage)
+        if bar is None or bar.total != n:
+            if bar is not None:
+                bar.close()
+            bar = self._bars[stage] = tqdm(
+                total=n, desc=f"{stage:8s}", dynamic_ncols=True, leave=stage not in self.TRANSIENT,
+            )
+        bar.update(i - bar.n)
+        bar.set_postfix_str(msg)
+        if n and i >= n:
+            bar.close()
+            del self._bars[stage]
+
+    def close(self) -> None:
+        for bar in self._bars.values():
+            bar.close()
+        self._bars.clear()
 
 
 # ------------------------------------------------------------------ helpers
@@ -208,10 +235,12 @@ def prepare_redo(client: NSEClient, store: Store, istore: IndexStore, meta: dict
 def run_sync(
     force: bool = False,
     do_breadth: bool = True,
-    progress: ProgressFn = _print_progress,
+    progress: Optional[ProgressFn] = None,
     redo: Optional[date] = None,
 ) -> Dict:
     ensure_dirs()
+    if progress is None:
+        progress = TqdmProgress()
     meta = load_meta()
     if not meta.get("last_synced"):
         raise SystemExit(
@@ -418,7 +447,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     try:
-        summary = run_sync(force=args.force, do_breadth=not args.no_breadth, redo=redo)
+        # route log lines through tqdm.write so they don't break the progress bars
+        with logging_redirect_tqdm():
+            progress = TqdmProgress()
+            try:
+                summary = run_sync(force=args.force, do_breadth=not args.no_breadth, progress=progress, redo=redo)
+            finally:
+                progress.close()
     except BaseException as e:  # SystemExit / KeyboardInterrupt are failures too for the status file
         logger.exception("sync failed")
         write_status(False, error=f"{type(e).__name__}: {e}")
