@@ -41,8 +41,14 @@ git clone https://github.com/ancap97/NSEDATA4ME.git
 cd NSEDATA4ME
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python sync.py
+gh release download data-latest -p nse-data.zip      # processed data (not stored in git)
+tar -xf nse-data.zip; del nse-data.zip
+.venv\Scripts\python sync.py                         # catch up from the snapshot's last_synced
 ```
+
+The data is published as the `nse-data.zip` asset of the
+[`data-latest` release](https://github.com/ancap97/NSEDATA4ME/releases/tag/data-latest)
+(download it from the browser if you don't use the `gh` CLI, and extract it in the repo root).
 
 ## Use it in a backtest
 
@@ -86,26 +92,33 @@ Notes
 .venv\Scripts\python sync.py --force                  # try today before 18:00
 .venv\Scripts\python sync.py --redo-date 2026-09-04   # re-download + re-ingest one day
 .venv\Scripts\python healthcheck.py                   # status; exit 1 = needs attention
+.venv\Scripts\python publish_data.py                  # zip data/ and replace the release asset
 ```
 
-Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv`, then sync.
+Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked in git), then sync.
 
-**Using more than one computer:** run `git pull` before syncing, and commit + `git push`
-after. Don't sync on two machines without pulling in between — the Parquet files can't be merged.
+**Why the data is not in git:** every sync rewrites thousands of compressed Parquet files, and git
+would keep a full ~400 MB copy per commit. `publish_data.py` replaces the single release asset
+instead, so nothing accumulates.
+
+**Using more than one computer:** download the latest snapshot before syncing, and run
+`publish_data.py` after. Don't sync on two machines in between — the Parquet files can't be merged.
 
 ## Layout
 
 ```
 loader.py        read API (import this)
 sync.py          update entrypoint        healthcheck.py  status check
+publish_data.py  upload data snapshot to the data-latest release
 config.py scraper.py parsers.py symbol_master.py storage.py adjuster.py breadth.py pipeline.py   (sync internals)
 data/store/      one Parquet per security (unadjusted + adj_factor)
 data/indices/    NSE indices             data/breadth/  market breadth
-data/actions/    corporate actions       data/raw/      downloaded NSE reports (not in repo)
-data/meta.json   sync state              data/logs/     sync log + status (not in repo)
+data/actions/    corporate actions       data/raw/      downloaded NSE reports
+data/meta.json   sync state              data/logs/     sync log + status
 ```
 
-`data/raw/` and `data/logs/` are not in the repo (too large / machine-local). Sync does not need
-the old raw files: it continues from `last_synced` in `data/meta.json` and downloads new days.
-On a fresh clone, `healthcheck.py` reports "needs attention" until the first sync.
+Only `data/actions/manual_overrides.csv` is in the repo. The processed data (`store`, `indices`,
+`actions`, `breadth`, `meta.json`, symbol maps) comes from the release zip; `data/raw/` and
+`data/logs/` are machine-local and not published. Sync does not need the old raw files: it
+continues from `last_synced` in `data/meta.json` and downloads new days.
 The full-rebuild tooling (bootstrap, validation, dashboard, tests) has been removed — back up `data/`.

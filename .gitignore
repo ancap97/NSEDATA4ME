@@ -1,10 +1,14 @@
-# Raw NSE downloads (3+ GB) - sync re-downloads what it needs
-data/raw/
-
-# Local runtime logs
-data/logs/
+# Generated data is not versioned: publish it with `python publish_data.py`
+# (GitHub Release asset) and restore it from there. Only hand-edited inputs are tracked.
+/data/*
+!/data/actions/
+/data/actions/*
+!/data/actions/manual_overrides.csv
 
 # Python
 .venv/
 __pycache__/
 *.pyc
+
+# Claude Code project notes (local only)
+CLAUDE.md
