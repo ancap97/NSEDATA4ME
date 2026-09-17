@@ -23,6 +23,7 @@ import argparse
 import json
 import subprocess
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -32,7 +33,9 @@ TAG = "data-latest"
 ASSET_PREFIX = "nse-data-"
 PART_MAX_BYTES = 120 * 1024 * 1024
 REPO = "ancap97/NSEDATA4ME"
-UPLOAD_RETRIES = 5
+UPLOAD_RETRIES = 10
+STALL_BYTES_PER_SEC = 50_000  # below this for STALL_SECONDS, curl drops the attempt and retries
+STALL_SECONDS = 30
 EXCLUDE_DIRS = (RAW_DIR, LOG_DIR)
 EXCLUDE_SUFFIXES = (".tmp", ".bak", ".zip")
 EXCLUDE_FILES = (MANUAL_OVERRIDES_FILE,)  # tracked in git; extracting a snapshot must not overwrite it
@@ -96,9 +99,11 @@ def delete_asset(asset: dict) -> None:
 def upload_part(release_id: int, token: str, path: Path) -> None:
     url = f"https://uploads.github.com/repos/{REPO}/releases/{release_id}/assets?name={path.name}"
     # -T streams from disk (gh's own upload crawls on this connection) and --retry covers the
-    # mid-transfer aborts; the auth header goes in via stdin so the token stays out of argv
+    # mid-transfer aborts; --speed-limit/--speed-time give up on a stalled connection instead of
+    # hanging for ever. The auth header goes in via stdin so the token stays out of argv.
     cmd = [
         "curl", "-sS", "--fail-with-body", "--retry", str(UPLOAD_RETRIES), "--retry-all-errors",
+        "--retry-delay", "5", "--speed-limit", str(STALL_BYTES_PER_SEC), "--speed-time", str(STALL_SECONDS),
         "-X", "POST", "-T", str(path), "-H", "Content-Type: application/zip", "-K", "-", url,
     ]
     r = subprocess.run(cmd, cwd=ROOT_DIR, input=f'header = "Authorization: Bearer {token}"\n',
@@ -134,10 +139,14 @@ def publish(built: list[Path], last_synced: str) -> None:
     token = gh("auth", "token")
     release_id, existing = release()
     for i, p in enumerate(built, 1):
-        print(f"uploading {p.name} ({i}/{len(built)}, {p.stat().st_size / 1e6:.0f} MB)...", flush=True)
+        mb = p.stat().st_size / 1e6
+        print(f"uploading {p.name} ({i}/{len(built)}, {mb:.0f} MB)...", flush=True)
         if p.name in existing:  # a same-named asset blocks the upload, so replace it
             delete_asset(existing[p.name])
+        t0 = time.monotonic()
         upload_part(release_id, token, p)
+        dt = time.monotonic() - t0
+        print(f"  done in {dt:.0f}s ({mb * 8 / dt:.1f} Mbit/s)", flush=True)
     verify(built)
 
 
@@ -145,6 +154,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, help="directory to keep the built zips in (default: temp, deleted)")
     ap.add_argument("--no-upload", action="store_true", help="only build the parts")
+    ap.add_argument("--reuse", action="store_true", help="upload the parts already in --out instead of rebuilding")
     args = ap.parse_args()
 
     meta = json.loads(META_FILE.read_text(encoding="utf-8"))
@@ -155,8 +165,14 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         dest_dir = args.out or Path(tmp)
         dest_dir.mkdir(parents=True, exist_ok=True)
-        print(f"zipping data/ (synced through {last_synced})")
-        built = build_parts(dest_dir)
+        if args.reuse:
+            built = sorted(dest_dir.glob(f"{ASSET_PREFIX}*.zip"))
+            if not built:
+                raise SystemExit(f"--reuse: no {ASSET_PREFIX}*.zip in {dest_dir}")
+            print(f"reusing {len(built)} parts in {dest_dir}")
+        else:
+            print(f"zipping data/ (synced through {last_synced})")
+            built = build_parts(dest_dir)
         if not args.no_upload:
             publish(built, last_synced)
             print(f"published {len(built)} parts to release {TAG} (data through {last_synced})")
