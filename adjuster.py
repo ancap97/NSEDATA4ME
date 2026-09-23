@@ -377,6 +377,22 @@ def _resolve_keys(df: pd.DataFrame, resolver: EntityResolver) -> pd.Series:
 
 
 
+def rekey_renamed(keys: pd.Series, resolver: EntityResolver) -> pd.Series:
+    """Map keys that no longer exist (the entity was renamed since the row was keyed) to the
+    entity's current key. Current keys and unresolvable ones are returned unchanged."""
+    cache: Dict[str, str] = {}
+
+    def current(k):
+        if not isinstance(k, str) or k in resolver.entities:
+            return k
+        if k not in cache:
+            sme = k.endswith("_SME")
+            cache[k] = resolver.key_for_symbol(k[:-4] if sme else k, sme=sme) or k
+        return cache[k]
+
+    return keys.map(current)
+
+
 def _candidate_ratios() -> List[Tuple[float, int, str]]:
     """(ratio, complexity, label) for plausible actions. Lower complexity =
     more common (pure splits, bonus 1:1 / 1:2 ...); combos = split x bonus."""
@@ -588,6 +604,8 @@ def build_actions_table(
             typed.append(add_rows.loc[:, ACTION_COLUMNS])
 
     df = pd.concat(typed, ignore_index=True)
+    # rows keyed before a rename still carry the old key; move them to the entity's current key
+    df["key"] = rekey_renamed(df["key"], resolver)
     df["ex_date"] = pd.to_datetime(df["ex_date"]).astype("datetime64[ns]")
     df["rec_date"] = pd.to_datetime(df["rec_date"], errors="coerce").astype("datetime64[ns]")
     df["_prio"] = df["source"].map(SOURCE_PRIORITY).fillna(9)
