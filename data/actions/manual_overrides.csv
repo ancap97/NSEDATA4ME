@@ -1,0 +1,11 @@
+symbol,ex_date,type,factor,action,note
+SUNTV,2007-07-23,SPLIT,2.0,add,NSE text "Agm/Spl/Bon-1:1/Div-20%" omits the 10->5 split ratio; raw close 1758.75 -> 436.60 = 4.03x = bonus 1:1 x split 2
+GULFPETRO,2013-07-09,BONUS,2.210526,ignore,NSE "Bonus 23:19" is total:held notation here; price moved 1.2175x
+GULFPETRO,2013-07-09,BONUS,1.210526,add,23 shares for every 19 held = factor 23/19 (matches 1.2175x price move)
+ITC,2005-09-21,SPLIT,15.0,add,Bonus 1:2 (x1.5) and FV split Rs10->Re1 (x10) both ex 2005-09-21 = x15; NSE API/eod2 lack it; raw close 1929.6 -> 140.2
+KMSUGAR,2010-03-26,SPLIT,5.0,add,FV split Rs 10 -> Rs 2 ex 26-Mar-2010 (record 29-Mar-2010; Trendlyne); stock suspended 2009-2010 so no price move on the date; first trade after gap 0.31x
+DIAPOWER,2013-08-26,BONUS,1.333333333,add,Bonus 1:3 record 27-Aug-2013 (Business Standard); ex-day open 0.83x and adj close = +20% upper circuit
+AURUS,2017-07-12,BONUS,1.4,add,Bonus 2:5 ex 12-Jul-2017 record 13-Jul-2017; ex-day adj close 45.00 = exactly +20% upper circuit on 52.50
+BSHSL,2020-08-27,BONUS,1.333333333,add,Bonus 1:3 ex 27-Aug-2020 record 28-Aug-2020 (Trendlyne + Goodreturns); equity capital Rs 8cr -> 10cr FY20->FY21; ex-day open 0.89x
+MOM30IETF,2022-08-12,SPLIT,10.0,add,ETF unit split FV Rs 100 -> Rs 10 ex 12-Aug-2022 record 17-Aug-2022 (Trendlyne); raw close 186.62 -> 18.89
+GOLDIAM,2026-07-10,BONUS,1.333333333,add,Bonus 1:3 record 10-Jul-2026 (T+1 so ex same day); 3.76cr bonus shares allotted 13-Jul-2026; ex-day adj close = +20% upper circuit
