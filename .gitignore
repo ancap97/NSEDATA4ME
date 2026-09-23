@@ -9,9 +9,3 @@
 .venv/
 __pycache__/
 *.pyc
-
-# Claude Code project notes (local only)
-CLAUDE.md
-
-# scratch audits and one-off scripts
-temp/
