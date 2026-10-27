@@ -1,9 +1,9 @@
 {
  "schema_version": 1,
- "last_synced": "2026-09-23",
- "last_actions_sync": "2026-09-23",
- "actions_fetched_through": "2026-09-23",
- "breadth_last_date": "2026-09-23",
+ "last_synced": "2026-10-26",
+ "last_actions_sync": "2026-10-27",
+ "actions_fetched_through": "2026-10-27",
+ "breadth_last_date": "2026-10-26",
  "adjustments_applied": true,
  "adjustments_applied_at": "2026-09-06T09:13:11.269020+05:30",
  "bootstrap": {
@@ -46,7 +46,7 @@
  ],
  "in_progress": null,
  "pending_delivery": [],
- "symbol_count": 4539,
+ "symbol_count": 4583,
  "store_build": {
   "years_done": [
    2005,
@@ -75,6 +75,6 @@
   "through": "2026-09-04",
   "complete": true
  },
- "special_sessions_checked": "2026-09-24",
- "last_sync_run": "2026-09-23T23:12:39+05:30"
+ "special_sessions_checked": "2026-10-27",
+ "last_sync_run": "2026-10-27T12:55:30+05:30"
 }

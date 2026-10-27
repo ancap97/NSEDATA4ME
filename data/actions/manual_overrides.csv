@@ -9,3 +9,9 @@ AURUS,2017-07-12,BONUS,1.4,add,Bonus 2:5 ex 12-Jul-2017 record 13-Jul-2017; ex-d
 BSHSL,2020-08-27,BONUS,1.333333333,add,Bonus 1:3 ex 27-Aug-2020 record 28-Aug-2020 (Trendlyne + Goodreturns); equity capital Rs 8cr -> 10cr FY20->FY21; ex-day open 0.89x
 MOM30IETF,2022-08-12,SPLIT,10.0,add,ETF unit split FV Rs 100 -> Rs 10 ex 12-Aug-2022 record 17-Aug-2022 (Trendlyne); raw close 186.62 -> 18.89
 GOLDIAM,2026-07-10,BONUS,1.333333333,add,Bonus 1:3 record 10-Jul-2026 (T+1 so ex same day); 3.76cr bonus shares allotted 13-Jul-2026; ex-day adj close = +20% upper circuit
+HDFCGOLD,2020-03-26,SPLIT,100.0,ignore,PR zip date is wrong: price flat that day (4004.75 -> 3931.50); the real 100:1 split is 2021-02-17 (4242.00 -> 41.80) and is applied from the PR row on that date
+HDFCNIFTY,2020-03-26,SPLIT,10.0,ignore,PR zip date is wrong: price flat that day (959.06 -> 951.04); the real 10:1 split is 2021-02-17 (1628.18 -> 162.44) and is applied there
+HDFCSENSEX,2020-03-26,SPLIT,10.0,ignore,PR zip date is wrong: price flat that day (3291.49 -> 3380.59); the real 10:1 split is 2021-02-17 (5633.58 -> 559.43) and is applied there
+SUNILHITEC,2016-10-27,SPLIT,10.0,ignore,PR zip date is wrong: NSE corporate actions (checked via NSE MCP 2026-10-27) list Bonus 1:1 + FV split 10->1 ex 2016-12-01 and nothing on 2016-10-27; 202.75 -> 10.65 on 2016-12-01 where factor 20 is applied
+TPHQ,2020-05-21,SPLIT,0.8,ignore,eod2 reference only: NSE has no corporate action Mar-Aug 2020 (NSE MCP 2026-10-27) and the price did not move (1.80 -> 1.75)
+DVL,2021-08-05,BONUS,1.5,ignore,Misfiled: this 1:2 bonus is Dhunseri Tea & Industries (DTIL) not DVL. NSE's PR zip files it under DTIL (applied there: 521.15 -> 330.00 open / 346.65 close = 0.665x on 2021-08-05) while the seed DB and NSE's action feed (NSE MCP 2026-10-27) list it under DVL and nothing under DTIL; DVL opened 303.30 on a 300.75 prior close and has no -33% step anywhere in its history
