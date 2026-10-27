@@ -1,12 +1,1 @@
-key,ex_date,type,factor,source,purpose,observed_move_on_date,expected_move,review
-AURUS,2017-07-12,BONUS,1.4,seed,Bonus 2:5,0.8571,0.7143,FIXED 2026-09-24: real action confirmed online; applied via manual_overrides.csv
-BSHSL,2020-08-27,BONUS,1.3333333333333333,seed,BONUS 1:3,0.8915,0.75,FIXED 2026-09-24: real action confirmed online; applied via manual_overrides.csv
-DIAPOWER,2013-08-26,BONUS,1.3333333333333333,pr,BONUS 1:3,0.8996,0.75,FIXED 2026-09-24: real action confirmed online; applied via manual_overrides.csv
-DVL,2021-08-05,BONUS,1.5,seed,Bonus 1:2,0.9345,0.6667,"OK DROPPED 2026-09-24: DVL never issued a bonus; the 1:2 bonus was Dhunseri Tea (DTIL), already applied"
-GOLDIAM,2026-07-10,BONUS,1.3333333333333333,seed,Bonus 1:3,0.8989,0.75,FIXED 2026-09-24: real action confirmed online; applied via manual_overrides.csv
-HDFCGOLD,2020-03-26,SPLIT,100.0,pr,FV SPLIT FRM RS 100 TO RS 1,0.9817,0.01,OK DROPPED 2026-09-24: wrong date; real split ex 2021-02-17 already applied
-HDFCNIFTY,2020-03-26,SPLIT,10.0,pr,FV SPLIT FRM761.25TO76.125,0.9916,0.1,OK DROPPED 2026-09-24: wrong date; real split ex 2021-02-17 already applied
-HDFCSENSEX,2020-03-26,SPLIT,10.000000000000002,pr,FV SPLIT 2503.61TO250.361,1.0271,0.1,OK DROPPED 2026-09-24: wrong date; real split ex 2021-02-17 already applied
-KMSUGAR,2010-03-26,SPLIT,5.0,seed,Fv Split Rs.10 To Rs.2,0.3084,0.2,FIXED 2026-09-24: real action confirmed online; applied via manual_overrides.csv
-SUNILHITEC,2016-10-27,SPLIT,10.0,pr,FV SPLIT FRM RS 10 TO RE 1,1.0384,0.1,OK DROPPED 2026-09-24: wrong date; real split+bonus ex 2016-12-01 already applied
-TPHQ,2020-05-21,SPLIT,0.8,ref,eod2 reference: applied factor 0.8 on 2020-05-21,0.9722,1.25,OK DROPPED 2026-09-24: no evidence of any 2020 action online; price did not move
+key,ex_date,type,factor,source,purpose,observed_move_on_date,expected_move
