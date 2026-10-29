@@ -78,7 +78,9 @@ def test_index_store_canonical_names(data_dir):
     assert canonical_index_name("Nifty 50") == "nifty 50"
     ist = IndexStore()
     cols = ["date", "index", "open", "high", "low", "close", "volume", "turnover_cr", "pe", "pb", "div_yield"]
-    mk = lambda d, n, c: pd.DataFrame([[pd.Timestamp(d), n, c, c, c, c, 1, 1.0, 20.0, 3.0, 1.0]], columns=cols)
+    def mk(d, n, c):
+        return pd.DataFrame([[pd.Timestamp(d), n, c, c, c, c, 1, 1.0, 20.0, 3.0, 1.0]], columns=cols)
+
     ist.append_day(mk("2015-11-05", "CNX Nifty", 1.0))
     ist.append_day(pd.concat([mk("2015-11-09", "Nifty 50", 2.0), mk("2015-11-09", "Nifty Bank", 5.0)]))
     df = ist.read("nifty 50")
@@ -241,7 +243,9 @@ def test_index_list_names_sees_writes_through_cache(data_dir):
 
     ist = IndexStore()
     cols = ["date", "index", "open", "high", "low", "close", "volume", "turnover_cr", "pe", "pb", "div_yield"]
-    mk = lambda d, n: pd.DataFrame([[pd.Timestamp(d), n, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0, 1.0]], columns=cols)
+    def mk(d, n):
+        return pd.DataFrame([[pd.Timestamp(d), n, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0, 1.0]], columns=cols)
+
     ist.write("CNX Nifty", mk("2015-11-06", "CNX Nifty"))
     ist.write("Nifty 50", mk("2015-11-05", "Nifty 50"))
     assert ist.list_names() == ["CNX Nifty"]  # latest file wins the canonical group

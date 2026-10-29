@@ -321,20 +321,24 @@ class IndexStore:
             # with_dates (list_names): one read per file for the stored name and the last date
             self._names, self._last_dates = {}, ({} if with_dates else None)
             for p in sorted(self.dir.glob("*.parquet")):
-                if with_dates:
-                    try:
-                        df = pd.read_parquet(p, columns=["index", "date"])
-                        self._names[p.stem] = df["index"].iloc[-1] if len(df) else p.stem
-                        self._last_dates[p.stem] = str(df["date"].max())
-                        continue
-                    except Exception:  # judge the two columns separately, as before
-                        pass
-                try:
+                both = self._read_name_and_last_date(p) if with_dates else None
+                if both is not None:
+                    self._names[p.stem], self._last_dates[p.stem] = both
+                    continue
+                try:  # name only (or the two columns judged separately, as before)
                     nm = pd.read_parquet(p, columns=["index"])["index"]
                     self._names[p.stem] = nm.iloc[-1] if len(nm) else p.stem
                 except Exception:
                     self._names[p.stem] = p.stem
         return self._names
+
+    @staticmethod
+    def _read_name_and_last_date(p: Path) -> Optional[Tuple[str, str]]:
+        try:
+            df = pd.read_parquet(p, columns=["index", "date"])
+            return (df["index"].iloc[-1] if len(df) else p.stem), str(df["date"].max())
+        except Exception:
+            return None
 
     def _last_date(self, slug: str) -> str:
         if self._last_dates is not None and slug in self._last_dates:

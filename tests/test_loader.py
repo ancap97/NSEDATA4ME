@@ -73,7 +73,9 @@ def test_old_symbol_resolves_to_current(loader):
 
 
 def test_universe_filters(loader):
-    keys = lambda **kw: sorted(loader.load_data(columns=["key"], **kw)["key"].unique())
+    def keys(**kw):
+        return sorted(loader.load_data(columns=["key"], **kw)["key"].unique())
+
     assert keys() == ["AAA", "BBB", "DEAD", "DUP", "MIG", "NEWNAME"]
     assert keys(include_delisted=False) == ["AAA", "BBB", "DUP", "MIG", "NEWNAME"]
     assert keys(include_sme=True) == ["AAA", "BBB", "DEAD", "DUP", "DUP_SME", "MIG", "NEWNAME", "SMEX_SME"]

@@ -22,10 +22,10 @@ from typing import Iterable, List, Optional, Union
 import numpy as np
 import pandas as pd
 
+import symbol_master
 from adjuster import load_actions as _load_actions
 from breadth import load_breadth as _load_breadth
 from config import STORE_COLUMNS
-import symbol_master
 from storage import IndexStore, Store
 from symbol_master import EntityResolver, load_master
 
