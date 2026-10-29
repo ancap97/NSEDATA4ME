@@ -127,3 +127,17 @@ def test_store_roundtrip_dtypes(data_dir):
     assert df["isin"].isna().all()
     assert df["adj_factor"].dtype == np.float64
 
+
+
+def test_load_meta_defaults_are_not_shared(data_dir):
+    """Mutating one loaded meta must not leak into DEFAULT_META / the next load_meta()."""
+    import storage
+
+    (data_dir / "meta.json").write_text(json.dumps({"last_synced": "2024-01-02"}))
+    m = storage.load_meta()
+    m["pending_delivery"].append("2024-01-02")
+    m["holidays"]["26-Jan-2024"] = "Republic Day"
+    m["special_sessions"].append("2024-01-20")
+    fresh = storage.load_meta()
+    assert fresh["pending_delivery"] == [] and fresh["holidays"] == {} and fresh["special_sessions"] == []
+    assert storage.DEFAULT_META["pending_delivery"] == [] and storage.DEFAULT_META["holidays"] == {}

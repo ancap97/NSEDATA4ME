@@ -13,6 +13,7 @@ leave a truncated Parquet file behind.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -268,7 +269,7 @@ def load_meta(path: Path = META_FILE) -> dict:
     sync state (which would make sync believe the database was never built).
     Restore from meta.json.bak (written before every save) if that happens."""
     ensure_dirs()
-    meta = dict(DEFAULT_META)
+    meta = copy.deepcopy(DEFAULT_META)  # the defaults hold dicts/lists that callers mutate
     if path.exists():
         try:
             meta.update(json.loads(path.read_text(encoding="utf-8")))
