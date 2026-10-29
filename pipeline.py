@@ -22,7 +22,7 @@ from config import (
 )
 from parsers import merge_delivery, parse_bhav, parse_delivery_full, parse_indices, parse_mto
 from scraper import raw_path
-from storage import IndexStore, Store
+from storage import PARALLEL_MIN_FILES, IndexStore, Store, _append_job, parallel_workers, run_parallel
 from symbol_master import EntityResolver
 
 logger = logging.getLogger("pipeline")
@@ -156,6 +156,13 @@ def commit_batch(
         big["key"] = big["key"].map(lambda k: alias.get(k, k))
     touched = []
     groups = big.groupby("key", sort=False)
+    workers = parallel_workers()
+    if workers > 1 and groups.ngroups >= PARALLEL_MIN_FILES:
+        jobs = [(str(store.dir), key, grp.drop(columns="key")) for key, grp in groups]
+        for i, key in enumerate(run_parallel(_append_job, jobs, workers), 1):
+            touched.append(key)
+            progress(i, len(jobs), key)
+        return touched
     for i, (key, grp) in enumerate(groups, 1):
         store.append(key, grp.drop(columns="key"))
         touched.append(key)

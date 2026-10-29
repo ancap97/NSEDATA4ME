@@ -162,3 +162,74 @@ def test_save_meta_never_leaves_meta_json_missing(data_dir, monkeypatch):
     monkeypatch.setattr(storage.os, "replace", real)
     assert storage.load_meta()["last_synced"] == "2024-01-02"
     assert json.loads((data_dir / "meta.json.bak").read_text())["last_synced"] == "2024-01-02"
+
+
+def _copy_store(src, dst):
+    import shutil
+
+    shutil.copytree(src, dst)
+    from storage import Store
+
+    return Store(dst)
+
+
+def _frames(store):
+    return {k: store.read(k) for k in store.list_keys()}
+
+
+def test_parallel_commit_and_remove_dates_match_serial(data_dir, tmp_path, monkeypatch):
+    """The worker-process path writes exactly what the in-process path writes."""
+    import pipeline
+    import storage
+    from storage import Store
+
+    base = Store()
+    keys = [f"K{i:03d}" for i in range(12)]
+    for i, k in enumerate(keys):
+        base.write(k, _rows(["2024-01-01", "2024-01-02"], close=10.0 + i, symbol=k))
+    new_rows = pd.concat([_rows(["2024-01-03"], close=20.0 + i, symbol=k).assign(key=k) for i, k in enumerate(keys)])
+    new_rows = pd.concat([new_rows, _rows(["2024-01-03"], symbol="NEWCO").assign(key="NEWCO")], ignore_index=True)
+
+    serial = _copy_store(base.dir, tmp_path / "serial")
+    parallel = _copy_store(base.dir, tmp_path / "parallel")
+    monkeypatch.setenv("NSE_SYNC_WORKERS", "1")
+    t1 = pipeline.commit_batch(serial, [new_rows], [])
+    n1 = serial.remove_dates(serial.list_keys(), [date(2024, 1, 2)])
+
+    monkeypatch.setenv("NSE_SYNC_WORKERS", "2")
+    monkeypatch.setattr(pipeline, "PARALLEL_MIN_FILES", 1)
+    monkeypatch.setattr(storage, "PARALLEL_MIN_FILES", 1)
+    seen = []
+    t2 = pipeline.commit_batch(parallel, [new_rows], [], progress=lambda i, n, k: seen.append((i, n, k)))
+    n2 = parallel.remove_dates(parallel.list_keys(), [date(2024, 1, 2)])
+
+    assert t1 == t2 == keys + ["NEWCO"] and n1 == n2 == 12
+    assert seen == [(i, 13, k) for i, k in enumerate(t1, 1)]
+    a, b = _frames(serial), _frames(parallel)
+    assert a.keys() == b.keys()
+    for k in a:
+        pd.testing.assert_frame_equal(a[k], b[k], check_exact=True)
+
+
+def test_parallel_falls_back_when_no_pool(monkeypatch):
+    import storage
+
+    def no_pool(*a, **kw):
+        raise OSError("no processes here")
+
+    monkeypatch.setattr(storage, "ProcessPoolExecutor", no_pool)
+    assert list(storage.run_parallel(divmod, [(7, 2), (9, 4)], workers=4)) == [(3, 1), (2, 1)]
+
+
+def test_parallel_workers_env(monkeypatch):
+    import storage
+
+    monkeypatch.setenv("NSE_SYNC_WORKERS", "1")
+    assert storage.parallel_workers() == 1
+    monkeypatch.setenv("NSE_SYNC_WORKERS", "0")
+    assert storage.parallel_workers() == 1
+    monkeypatch.delenv("NSE_SYNC_WORKERS")
+    monkeypatch.setattr(storage, "_PARALLEL_ALLOWED", False)
+    assert storage.parallel_workers() == 1  # library use (run_sync from a script): in-process
+    monkeypatch.setattr(storage, "_PARALLEL_ALLOWED", True)
+    assert 1 <= storage.parallel_workers() <= 4  # the sync.py command

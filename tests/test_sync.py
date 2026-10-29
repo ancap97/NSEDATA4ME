@@ -232,7 +232,15 @@ def test_database_missing_exits(data_dir, monkeypatch):
 # ------------------------------------------------------------------ CLI
 
 
-def test_main_exit_codes_and_status_file(data_dir, monkeypatch):
+@pytest.fixture
+def keep_parallel_flag(monkeypatch):
+    import storage
+
+    monkeypatch.setattr(storage, "_PARALLEL_ALLOWED", False)  # restored after the test
+    return storage
+
+
+def test_main_exit_codes_and_status_file(data_dir, monkeypatch, keep_parallel_flag):
     calls = {}
 
     def ok(**kw):
@@ -245,6 +253,7 @@ def test_main_exit_codes_and_status_file(data_dir, monkeypatch):
     assert calls["force"] is True and calls["do_breadth"] is False and calls["redo"] == date(2024, 1, 15)
     st = json.loads(sync.SYNC_STATUS_FILE.read_text())
     assert st["ok"] is True and st["summary"] == {"ingested": ["2024-01-29"]}
+    assert keep_parallel_flag._PARALLEL_ALLOWED  # the command may rewrite files in worker processes
 
     def boom(**kw):
         raise ConnectionError("NSE down")
@@ -257,7 +266,7 @@ def test_main_exit_codes_and_status_file(data_dir, monkeypatch):
     assert st["ok"] is False and "NSE down" in st["error"]
 
 
-def test_main_fetches_snapshot_by_default(data_dir, monkeypatch):
+def test_main_fetches_snapshot_by_default(data_dir, monkeypatch, keep_parallel_flag):
     seen = []
     monkeypatch.setattr(sync, "ensure_data", lambda: seen.append(True))
     monkeypatch.setattr(sync, "run_sync", lambda **kw: {})

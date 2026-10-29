@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import copy
 import json
+import multiprocessing
 import os
 import re
 import shutil
+from concurrent.futures import ProcessPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -87,6 +89,56 @@ def normalise_store_frame(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df[col].astype("object").where(df[col].notna(), None)
     df = df.sort_values("date", kind="stable").drop_duplicates(subset="date", keep="last")
     return df.reset_index(drop=True)
+
+
+# Rewriting thousands of security files (one day's appends, --redo-date) is per-file pandas
+# overhead that threads cannot overlap, so large batches run in worker processes ("spawn",
+# which is also what Windows uses). Each file is written by exactly one worker, results are
+# consumed in key order. "spawn" re-imports the caller's __main__ in every worker, which only
+# works for scripts guarded by `if __name__ == "__main__"`; so this is on for the sync.py
+# command (allow_parallel_rewrites) and otherwise only when NSE_SYNC_WORKERS asks for it.
+# NSE_SYNC_WORKERS=1 keeps everything in-process.
+PARALLEL_MIN_FILES = 200
+_PARALLEL_ALLOWED = False
+
+
+def allow_parallel_rewrites() -> None:
+    global _PARALLEL_ALLOWED
+    _PARALLEL_ALLOWED = True
+
+
+def parallel_workers() -> int:
+    env = os.environ.get("NSE_SYNC_WORKERS", "").strip()
+    if env:
+        return max(1, int(env))
+    if not _PARALLEL_ALLOWED:
+        return 1
+    return max(1, min(4, (os.cpu_count() or 2) - 1))
+
+
+def _append_job(directory: str, key: str, rows: pd.DataFrame) -> str:
+    Store(Path(directory)).append(key, rows)
+    return key
+
+
+def _remove_dates_job(directory: str, key: str, stamps: frozenset) -> bool:
+    return Store(Path(directory)).remove_dates([key], stamps) == 1
+
+
+def run_parallel(fn: Callable, jobs: Sequence[tuple], workers: Optional[int] = None) -> Iterator:
+    """Yield fn(*job) for each job, in order, from worker processes. Falls back to running
+    in-process when a pool cannot be started (restricted environments)."""
+    workers = parallel_workers() if workers is None else workers
+    try:
+        pool = ProcessPoolExecutor(min(workers, len(jobs)), mp_context=multiprocessing.get_context("spawn"))
+    except (OSError, NotImplementedError, ValueError, ImportError):
+        pool = None
+    if pool is None:
+        for job in jobs:
+            yield fn(*job)
+        return
+    with pool:
+        yield from pool.map(fn, *zip(*jobs), chunksize=8)
 
 
 class Store:
@@ -193,6 +245,11 @@ class Store:
 
     def remove_dates(self, keys: Iterable[str], dates: Iterable[date]) -> int:
         stamps = {pd.Timestamp(d) for d in dates}
+        keys = list(keys)
+        workers = parallel_workers()
+        if workers > 1 and len(keys) >= PARALLEL_MIN_FILES:
+            jobs = [(str(self.dir), k, frozenset(stamps)) for k in keys]
+            return sum(run_parallel(_remove_dates_job, jobs, workers))
         touched = 0
         for key in keys:
             if not self.exists(key):

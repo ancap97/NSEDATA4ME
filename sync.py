@@ -55,7 +55,7 @@ from pipeline import (
     load_indices_day,
 )
 from scraper import NSEClient, raw_path
-from storage import IndexStore, Store, load_meta, save_meta
+from storage import IndexStore, Store, allow_parallel_rewrites, load_meta, save_meta
 from symbol_master import EntityResolver
 
 logger = logging.getLogger("sync")
@@ -437,6 +437,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     args = ap.parse_args(argv)
     redo = date.fromisoformat(args.redo_date) if args.redo_date else None
+    allow_parallel_rewrites()  # sync.py runs main() under a __main__ guard, as "spawn" needs
 
     if not args.no_fetch:
         ensure_data()  # fresh clone: pull the snapshot from the data branch, then sync on top
