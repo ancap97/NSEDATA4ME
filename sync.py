@@ -363,7 +363,8 @@ def run_sync(
             before_commit=before_commit, on_day_committed=on_committed,
         )
         summary["renames"] = stats["renames"]
-        resolver.save_outputs(as_of=available[-1])
+        # last_synced, not available[-1]: with --redo-date the re-ingested day is in the past
+        resolver.save_outputs(as_of=date.fromisoformat(meta["last_synced"]))
         meta["symbol_count"] = len(resolver.entities)
 
         # 5. corporate actions + adjustments

@@ -89,3 +89,18 @@ def test_master_frame_status_and_persistence(data_dir):
     assert r2.isin2key == r.isin2key and r2.pair2key == r.pair2key
     assert r2.entities["A"].last_date == "2024-03-01"
     assert config.SYMBOL_HISTORY_FILE.exists()
+
+
+def test_resolving_an_older_day_again_keeps_latest_state():
+    """--redo-date re-resolves a past day: last_date, series and symbol periods must not move back."""
+    r = EntityResolver()
+    r.resolve_day(day(("OLD", "EQ", "INE1"), ("B", "EQ", "INE2")), date(2024, 1, 1))
+    r.resolve_day(day(("NEW", "BE", "INE1"), ("B", "EQ", "INE2")), date(2024, 1, 3))  # rename + series change
+    keys, ren = r.resolve_day(day(("OLD", "EQ", "INE1"), ("B", "EQ", "INE2")), date(2024, 1, 1))
+    assert list(keys) == ["NEW", "B"] and ren == []
+    e = r.entities["NEW"]
+    assert (e.last_date, e.series, e.symbol) == ("2024-01-03", "BE", "NEW")
+    assert [(p.value, p.from_date, p.to_date) for p in e.symbols] == [
+        ("OLD", "2024-01-01", "2024-01-01"), ("NEW", "2024-01-03", "2024-01-03")]
+    assert [(p.from_date, p.to_date) for p in e.isins] == [("2024-01-01", "2024-01-03")]
+    assert r.entities["B"].last_date == "2024-01-03"

@@ -162,6 +162,17 @@ def test_redo_date_reingests_one_day(nse):
         nse(ist(2024, 1, 29, 10, 0), redo=date(2024, 1, 29))
 
 
+def test_redo_date_keeps_symbol_master_current(nse):
+    import loader
+
+    cols = ["last_date", "status", "series", "previous_symbols"]
+    before = loader.list_symbols(include_sme=True).set_index("key")[cols]
+    publish(D[10])
+    nse(ist(2024, 1, 29, 10, 0), redo=D[10])
+    after = loader.list_symbols(include_sme=True).set_index("key")[cols]
+    pd.testing.assert_frame_equal(after, before)
+
+
 def test_redo_date_without_bhavcopy_exits(nse):
     with pytest.raises(SystemExit, match="no bhavcopy"):
         nse(ist(2024, 1, 29, 10, 0), redo=D[5])

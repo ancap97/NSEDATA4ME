@@ -228,9 +228,12 @@ class EntityResolver:
                 self.pair2key[pair] = key
                 keys[idx] = key
 
-        # update last_date / series for all entities seen today
+        # update last_date / series for all entities seen today; re-resolving an older day
+        # (sync --redo-date) must not move an entity's state back in time
         for key, series in zip(keys, day["series"]):
             e = self.entities[key]
+            if d < e.last_date:
+                continue
             e.last_date = d
             e.series = series
             if e.symbols:
