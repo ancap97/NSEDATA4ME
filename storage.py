@@ -17,6 +17,7 @@ import copy
 import json
 import os
 import re
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -286,9 +287,11 @@ def save_meta(meta: dict, path: Path = META_FILE) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(meta, indent=1, cls=_JsonEncoder), encoding="utf-8")
     if path.exists():
+        # copy, not move: meta.json must exist at every instant (bootstrap treats a missing
+        # meta.json as a fresh clone and would re-extract the snapshot over the store)
         bak = path.with_suffix(".json.bak")
         try:
-            os.replace(path, bak)
+            shutil.copy2(path, bak)
         except OSError:
             pass
     os.replace(tmp, path)

@@ -141,3 +141,24 @@ def test_load_meta_defaults_are_not_shared(data_dir):
     fresh = storage.load_meta()
     assert fresh["pending_delivery"] == [] and fresh["holidays"] == {} and fresh["special_sessions"] == []
     assert storage.DEFAULT_META["pending_delivery"] == [] and storage.DEFAULT_META["holidays"] == {}
+
+
+def test_save_meta_never_leaves_meta_json_missing(data_dir, monkeypatch):
+    """If moving the new meta.json into place fails, the previous one must still be there:
+    without meta.json the next sync believes this is a fresh clone and re-extracts the snapshot."""
+    import storage
+
+    storage.save_meta({**storage.load_meta(), "last_synced": "2024-01-02"})
+    real = storage.os.replace
+
+    def failing_replace(src, dst):
+        if str(src).endswith("meta.tmp"):
+            raise OSError("disk full")
+        return real(src, dst)
+
+    monkeypatch.setattr(storage.os, "replace", failing_replace)
+    with pytest.raises(OSError):
+        storage.save_meta({**storage.load_meta(), "last_synced": "2024-01-03"})
+    monkeypatch.setattr(storage.os, "replace", real)
+    assert storage.load_meta()["last_synced"] == "2024-01-02"
+    assert json.loads((data_dir / "meta.json.bak").read_text())["last_synced"] == "2024-01-02"
