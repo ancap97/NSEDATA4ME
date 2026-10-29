@@ -169,3 +169,69 @@ def test_columns_arg_equals_full_load_then_select(loader, columns, adjusted):
     sym = loader.load_data(["OLDNAME", "AAA"], columns=columns, **kw)
     sym_full = loader.load_data(["OLDNAME", "AAA"], **kw)
     pd.testing.assert_frame_equal(sym, sym_full.loc[:, [c for c in columns if c in sym_full.columns]])
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        {"columns": ["date", "symbol", "close"]},
+        {"columns": ["close", "volume", "deliv_qty", "trades"], "adjusted": False},
+        {"columns": ["open", "high", "low", "close", "prev_close", "volume", "turnover", "trades", "deliv_qty",
+                     "deliv_pct", "adj_factor"], "include_sme": True},
+        {"columns": ["close"], "start_date": "2024-01-08", "end_date": "2024-01-31"},
+        {"columns": ["close"], "start_date": None, "include_delisted": False},
+        {"columns": ["close"], "start_date": "2030-01-01"},
+        {"columns": ["close", "isin"]},  # string column: scan declines, file-by-file path
+        {"symbols": ["AAA", "OLDNAME", "NEWNAME"], "columns": ["close"]},  # duplicate key: declines
+    ],
+)
+def test_scan_path_matches_file_by_file(loader, monkeypatch, kw):
+    monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 10**9)
+    slow = loader.load_data(**kw)
+    monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 1)
+    fast = loader.load_data(**kw)
+    pd.testing.assert_frame_equal(fast, slow)
+    if "symbols" in kw:  # aliases of one security: load_wide raises on the duplicates either way
+        return
+    wide_kw = {k: v for k, v in kw.items() if k != "columns"}
+    monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 10**9)
+    w_slow = loader.load_wide("close", **wide_kw)
+    monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 1)
+    pd.testing.assert_frame_equal(loader.load_wide("close", **wide_kw), w_slow)
+
+
+def test_store_scan_guards(db):
+    from storage import Store
+
+    s = Store()
+    keys = ["AAA", "BBB", "NOFILE", "DEAD"]
+    frame, owner = s.scan(keys, ["date", "close"])
+    assert sorted(set(owner)) == [0, 1, 3]  # missing file skipped, positions refer to `keys`
+    per_file = pd.concat([s.read(k, columns=["date", "close"]) for k in ("AAA", "BBB", "DEAD")], ignore_index=True)
+    pd.testing.assert_frame_equal(frame, per_file)
+    assert s.scan(keys, ["date", "isin"]) is None
+    assert s.scan(keys, ["close"]) is None  # date is needed for the bounds
+    assert s.scan(["AAA", "AAA"], ["date", "close"]) is None
+    assert s.scan(keys, ["date", "close"], start=pd.Timestamp("2024-01-02", tz="Asia/Kolkata")) is None
+    assert s.scan(keys, ["date", "close"], start=pd.NaT) is None
+    empty, own = s.scan(["NOFILE"], ["date", "close"])
+    assert empty.empty and len(own) == 0
+    f, o = s.scan(keys, ["date", "close"], start=pd.Timestamp("2030-01-01"))
+    assert f.empty and len(o) == 0
+
+
+def test_store_scan_declines_mixed_file_schemas(data_dir):
+    from storage import Store
+
+    s = Store()
+    base = pd.DataFrame({"date": pd.to_datetime(["2024-01-01"]).astype("datetime64[ns]"), "close": [1.0],
+                         "volume": [10]})
+    s.write("A", base)
+    s.write("B", base)
+    assert s.scan(["A", "B"], ["date", "volume"]) is not None
+    # a file written outside Store.write with another type for volume
+    base.assign(volume=[10.0]).to_parquet(s.path("B"), index=False)
+    assert s.scan(["A", "B"], ["date", "volume"]) is None
+    assert s.scan(["A", "B"], ["date", "close"]) is not None
+    base.assign(date=base["date"].astype("datetime64[us]")).to_parquet(s.path("B"), index=False)
+    assert s.scan(["A", "B"], ["date", "close"]) is None  # date unit differs

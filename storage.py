@@ -20,13 +20,38 @@ import re
 import shutil
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.dataset as pads
 
 from config import INDEX_DIR, META_FILE, STORE_COLUMNS, STORE_DIR, ensure_dirs
 
 _INDEX_NAME_RE = re.compile(r"[^a-z0-9]+")
+
+# Store columns whose pandas conversion is the same for every file, so one scan over many
+# files gives what reading them one by one does. String columns are excluded: an all-null
+# isin is stored as Arrow `null` and read back as object, not str.
+SCAN_COLUMNS = ("date", "open", "high", "low", "close", "prev_close", "volume", "turnover", "trades",
+                "deliv_qty", "deliv_pct", "adj_factor")
+
+
+def _scan_signature(schema: pa.Schema, columns: Sequence[str]) -> Optional[tuple]:
+    """Arrow type + pandas metadata of `columns` in one file (None if any is missing)."""
+    try:
+        meta = {c["name"]: (c["pandas_type"], c["numpy_type"])
+                for c in json.loads(schema.metadata[b"pandas"])["columns"]}
+    except (KeyError, TypeError, ValueError):
+        return None
+    sig = []
+    for c in columns:
+        i = schema.get_field_index(c)
+        if i < 0 or c not in meta:
+            return None
+        sig.append((c, str(schema.field(i).type), meta[c]))
+    return tuple(sig)
 
 
 class _JsonEncoder(json.JSONEncoder):
@@ -85,6 +110,63 @@ class Store:
         if not p.exists():
             return pd.DataFrame(columns=columns or STORE_COLUMNS)
         return pd.read_parquet(p, columns=columns, engine="pyarrow")
+
+    def scan(
+        self,
+        keys: Sequence[str],
+        columns: Sequence[str],
+        start: Optional[pd.Timestamp] = None,
+        end: Optional[pd.Timestamp] = None,
+    ) -> Optional[Tuple[pd.DataFrame, np.ndarray]]:
+        """Read `columns` of many securities in one multi-threaded pyarrow scan.
+
+        Returns (frame, row_owner): exactly the rows and dtypes that reading each existing key
+        with read(key, columns), keeping start <= date <= end and concatenating in `keys` order
+        gives, plus for each row the position of its key in `keys`. Returns None whenever that
+        equivalence cannot be guaranteed (string or unknown columns, duplicate keys, tz-aware
+        or NaT bounds, files whose column types or pandas metadata differ, out-of-order
+        batches); callers then read file by file."""
+        if not columns or "date" not in columns or not set(columns) <= set(SCAN_COLUMNS):
+            return None
+        bounds = [b for b in (start, end) if b is not None]
+        if any(pd.isna(b) or b.tzinfo is not None for b in bounds):
+            return None
+        paths = [self.path(k) for k in keys]
+        if len(set(paths)) != len(paths):
+            return None
+        present = [i for i, p in enumerate(paths) if p.exists()]
+        if not present:
+            return pd.DataFrame(), np.zeros(0, dtype=np.int64)
+
+        dset = pads.dataset([str(paths[i]) for i in present], format="parquet")
+        frags = list(dset.get_fragments())
+        if len(frags) != len(present) or any(Path(f.path) != paths[i] for f, i in zip(frags, present)):
+            return None
+        ref = _scan_signature(frags[0].physical_schema, columns)
+        if ref is None or any(_scan_signature(f.physical_schema, columns) != ref for f in frags[1:]):
+            return None
+
+        flt = None
+        if start is not None:
+            flt = pads.field("date") >= pa.scalar(start.to_datetime64())
+        if end is not None:
+            e = pads.field("date") <= pa.scalar(end.to_datetime64())
+            flt = e if flt is None else flt & e
+        scanner = dset.scanner(columns=list(columns), filter=flt)
+        pos = {f.path: i for f, i in zip(frags, present)}
+        batches, owners, last = [], [], -1
+        for tagged in scanner.scan_batches():
+            rb = tagged.record_batch
+            if not rb.num_rows:
+                continue
+            i = pos[tagged.fragment.path]
+            if i < last:
+                return None
+            last = i
+            batches.append(rb)
+            owners.append(np.full(rb.num_rows, i, dtype=np.int64))
+        frame = pa.Table.from_batches(batches, schema=scanner.projected_schema).to_pandas()
+        return frame, (np.concatenate(owners) if owners else np.zeros(0, dtype=np.int64))
 
     def write(self, key: str, df: pd.DataFrame) -> None:
         _atomic_parquet(normalise_store_frame(df), self.path(key))

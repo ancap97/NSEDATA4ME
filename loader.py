@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, List, Optional, Union
 
+import numpy as np
 import pandas as pd
 
 from adjuster import load_actions as _load_actions
@@ -31,6 +32,9 @@ DateLike = Union[str, date, pd.Timestamp, None]
 
 PRICE_COLS = ("open", "high", "low", "close", "prev_close")
 QTY_COLS = ("volume", "deliv_qty")
+# From this many securities on, numeric column reads go through one multi-threaded pyarrow
+# scan (Store.scan) instead of a file-by-file loop; the result is identical either way.
+SCAN_MIN_KEYS = 16
 
 
 def _ts(d: DateLike) -> Optional[pd.Timestamp]:
@@ -102,25 +106,31 @@ def load_data(
     start, end = _ts(start_date), _ts(end_date)
     current_symbol = dict(zip(master["key"], master["symbol"])) if not master.empty else {}
     read_cols = _store_columns(columns, adjusted)
-    frames = []
-    for key in keys:
-        df = store.read(key, columns=read_cols)
-        if df.empty:
-            continue
-        if start is not None:
-            df = df[df["date"] >= start]
-        if end is not None:
-            df = df[df["date"] <= end]
-        if df.empty:
-            continue
-        df = df.copy()
-        df["key"] = key
-        df["symbol"] = current_symbol.get(key, key)
-        frames.append(df)
+    scanned = store.scan(keys, read_cols, start, end) if read_cols and len(keys) >= SCAN_MIN_KEYS else None
+    if scanned is not None:
+        out, owner = scanned
+        owner_keys = list(keys)
+    else:
+        frames, owner_keys = [], []
+        for key in keys:
+            df = store.read(key, columns=read_cols)
+            if df.empty:
+                continue
+            if start is not None:
+                df = df[df["date"] >= start]
+            if end is not None:
+                df = df[df["date"] <= end]
+            if df.empty:
+                continue
+            frames.append(df)
+            owner_keys.append(key)
+        out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        owner = np.repeat(np.arange(len(frames)), [len(f) for f in frames])
 
-    if not frames:
+    if out.empty:
         return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
+    out["key"] = np.array(owner_keys, dtype=object)[owner]
+    out["symbol"] = np.array([current_symbol.get(k, k) for k in owner_keys], dtype=object)[owner]
     if adjusted:
         af = out["adj_factor"]
         for c in PRICE_COLS:
