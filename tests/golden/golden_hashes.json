@@ -1,0 +1,702 @@
+{
+ "adj_factor_recompute": {
+  "columns_head": [
+   "key",
+   "rows",
+   "factor_sha1",
+   "mismatches"
+  ],
+  "dtypes": [
+   "int64",
+   "str"
+  ],
+  "sha256": "69025257e25e4c8b16a0267d66f29d80730e94f20ecf7c76951972eee7a9fbed",
+  "shape": [
+   4583,
+   4
+  ]
+ },
+ "compute_breadth": {
+  "columns_head": [
+   "date",
+   "universe",
+   "advances",
+   "declines",
+   "unchanged",
+   "adv_dec_ratio",
+   "net_adv_ratio",
+   "ad_line",
+   "pct_above_50dma",
+   "pct_above_200dma",
+   "new_highs",
+   "new_lows",
+   "net_new_highs",
+   "net_new_highs_cum",
+   "mcclellan_osc"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "int64"
+  ],
+  "sha256": "12a05ab4ed0944689873bb15906fc168f5a19ed19aa130562d4be88e694b47e0",
+  "shape": [
+   5407,
+   15
+  ]
+ },
+ "history_json": {
+  "len": 839555,
+  "sha256": "71f48aa1a8ed0c3ccac12e4c4afca91976c3957659f9ba0f4fc48d90762a274c"
+ },
+ "list_indices": {
+  "len": 198,
+  "sha256": "55206d5357dda026db050fade58d9c93844b6da0b61e9e4581ff4c1e49b0572a"
+ },
+ "list_symbols": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "series",
+   "isin",
+   "is_sme",
+   "first_date",
+   "last_date",
+   "status",
+   "previous_symbols",
+   "previous_isins",
+   "notes"
+  ],
+  "dtypes": [
+   "bool",
+   "datetime64[us]",
+   "str"
+  ],
+  "sha256": "0e278a9a0ad759d475724967d45742a82c42272904af20c17391de7a59f0b5fc",
+  "shape": [
+   3975,
+   11
+  ]
+ },
+ "list_symbols_active_sme": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "series",
+   "isin",
+   "is_sme",
+   "first_date",
+   "last_date",
+   "status",
+   "previous_symbols",
+   "previous_isins",
+   "notes"
+  ],
+  "dtypes": [
+   "bool",
+   "datetime64[us]",
+   "str"
+  ],
+  "sha256": "9ae0b1da219e62e0a5c320e19d6e02c7d30f9ae5f334c8c9b65bd2c77a56702e",
+  "shape": [
+   3546,
+   11
+  ]
+ },
+ "load_actions": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "ex_date",
+   "rec_date",
+   "type",
+   "factor",
+   "amount",
+   "purpose",
+   "source",
+   "hash",
+   "orig_ex_date"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "915139225183291e93ba471ab5dd69d4c1e1009deaa538d5ac33636dbeba115b",
+  "shape": [
+   27324,
+   11
+  ]
+ },
+ "load_actions_infosystch": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "ex_date",
+   "rec_date",
+   "type",
+   "factor",
+   "amount",
+   "purpose",
+   "source",
+   "hash",
+   "orig_ex_date"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "a8831de2207f7b20dea1f878b82c4c9cfdc4c3fa02a5e622d700ecd9c3b04a26",
+  "shape": [
+   49,
+   11
+  ]
+ },
+ "load_actions_irctc_adj": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "ex_date",
+   "rec_date",
+   "type",
+   "factor",
+   "amount",
+   "purpose",
+   "source",
+   "hash",
+   "orig_ex_date"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "fa47f368af137dfb5a176d2aa781f57a03ac9a700ecf6a4c00d2157278fdeff6",
+  "shape": [
+   1,
+   11
+  ]
+ },
+ "load_breadth": {
+  "columns_head": [
+   "date",
+   "universe",
+   "advances",
+   "declines",
+   "unchanged",
+   "adv_dec_ratio",
+   "net_adv_ratio",
+   "ad_line",
+   "pct_above_50dma",
+   "pct_above_200dma",
+   "new_highs",
+   "new_lows",
+   "net_new_highs",
+   "net_new_highs_cum",
+   "mcclellan_osc"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "int64"
+  ],
+  "sha256": "12a05ab4ed0944689873bb15906fc168f5a19ed19aa130562d4be88e694b47e0",
+  "shape": [
+   5407,
+   15
+  ]
+ },
+ "load_breadth_window": {
+  "columns_head": [
+   "date",
+   "universe",
+   "advances",
+   "declines",
+   "unchanged",
+   "adv_dec_ratio",
+   "net_adv_ratio",
+   "ad_line",
+   "pct_above_50dma",
+   "pct_above_200dma",
+   "new_highs",
+   "new_lows",
+   "net_new_highs",
+   "net_new_highs_cum",
+   "mcclellan_osc"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "int64"
+  ],
+  "sha256": "7306423d44ad2bee74440daea847a41304d09abccf84bbbfde5faff304b9cca7",
+  "shape": [
+   250,
+   15
+  ]
+ },
+ "load_data_all_2026_sme": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "bafc1f6fe1f190941ef488a0c414816c4ad58f7af86ad30efce0c951f48050b3",
+  "shape": [
+   630660,
+   16
+  ]
+ },
+ "load_data_all_cols_2025": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "close",
+   "deliv_qty"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "dda8953cc58af8f809c63938c76641fa915564e62e5e66441f2c15fc9aedfd29",
+  "shape": [
+   1140220,
+   4
+  ]
+ },
+ "load_data_syms_2024": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "03f79cc254f1eee09dded93f75fe862429c914b7fea8037f8d382afb726f6b73",
+  "shape": [
+   10983,
+   16
+  ]
+ },
+ "load_data_syms_cols_window": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "close",
+   "volume",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "a842b4c4a388abf6b45967fc6ad95942f6d7649f3115c13e8e89c8bbd9591da9",
+  "shape": [
+   19830,
+   5
+  ]
+ },
+ "load_data_syms_none_start": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "358b19a6314e8e8aecf922631cbb4a68046ef8e81f77f66ad71e30b256f4cdc1",
+  "shape": [
+   542,
+   16
+  ]
+ },
+ "load_data_syms_raw_full": {
+  "columns_head": [
+   "date",
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "49b9a8d9583e108913c200404fd7d8d62c1afec41cf114c3adb7793b9eec02ed",
+  "shape": [
+   75581,
+   16
+  ]
+ },
+ "load_index_bank_2020": {
+  "columns_head": [
+   "date",
+   "index",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "turnover_cr",
+   "pe",
+   "pb",
+   "div_yield"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "60304d3cb9873c06e4396923d2435408f9d7c2e06cbf247743eb8fd53c259a7f",
+  "shape": [
+   1240,
+   11
+  ]
+ },
+ "load_index_nifty50": {
+  "columns_head": [
+   "date",
+   "index",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "turnover_cr",
+   "pe",
+   "pb",
+   "div_yield"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "69bc6293d6ee05bd2575ad73ec95419bcad328adf67b63dc4514c1aa29e5fa7b",
+  "shape": [
+   3618,
+   11
+  ]
+ },
+ "load_index_old_name": {
+  "columns_head": [
+   "date",
+   "index",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "turnover_cr",
+   "pe",
+   "pb",
+   "div_yield"
+  ],
+  "dtypes": [
+   "datetime64[ns]",
+   "float64",
+   "str"
+  ],
+  "sha256": "69bc6293d6ee05bd2575ad73ec95419bcad328adf67b63dc4514c1aa29e5fa7b",
+  "shape": [
+   3618,
+   11
+  ]
+ },
+ "load_symbol_infosystch": {
+  "columns_head": [
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "float64",
+   "str"
+  ],
+  "sha256": "8549fe8999cf824e0bf824973e4b3d3b0d6dd6d296a588c5f555758eadc79196",
+  "shape": [
+   5405,
+   15
+  ]
+ },
+ "load_symbol_zomato_raw": {
+  "columns_head": [
+   "symbol",
+   "key",
+   "isin",
+   "series",
+   "open",
+   "high",
+   "low",
+   "close",
+   "prev_close",
+   "volume",
+   "turnover",
+   "trades",
+   "deliv_qty",
+   "deliv_pct",
+   "adj_factor"
+  ],
+  "dtypes": [
+   "Int64",
+   "float64",
+   "str"
+  ],
+  "sha256": "e06c6a7b540edfad310eb2e9057c449f9d191feedcdf0e0f96ec321daf5c80db",
+  "shape": [
+   449,
+   15
+  ]
+ },
+ "load_wide_close_all_2024": {
+  "columns_head": [
+   "20MICRONS",
+   "21STCENMGM",
+   "360ONE",
+   "3BBLACKBIO",
+   "3IINFOLTD",
+   "3MINDIA",
+   "3PLAND",
+   "5PAISA",
+   "63MOONS",
+   "A2ZINFRA",
+   "AAATECH",
+   "AADHARHFC",
+   "AAKASH",
+   "AAREYDRUGS",
+   "AARNAV",
+   "AARON",
+   "AARTECH",
+   "AARTIDRUGS",
+   "AARTIIND",
+   "AARTIPHARM"
+  ],
+  "dtypes": [
+   "float64"
+  ],
+  "sha256": "23dadc5c92404b042d49d47ae7291a88c6e6edadf184abafa9afe3bdd995bcdf",
+  "shape": [
+   698,
+   3052
+  ]
+ },
+ "load_wide_close_raw_sme_2026": {
+  "columns_head": [
+   "20MICRONS",
+   "21STCENMGM",
+   "360ONE",
+   "3BBLACKBIO",
+   "3IINFOLTD",
+   "3MINDIA",
+   "3PLAND",
+   "5PAISA",
+   "63MOONS",
+   "A2ZINFRA",
+   "AAATECH",
+   "AADHARHFC",
+   "AAKAAR",
+   "AAKASH",
+   "AARADHYA",
+   "AAREYDRUGS",
+   "AARNAV",
+   "AARON",
+   "AARTECH",
+   "AARTIDRUGS"
+  ],
+  "dtypes": [
+   "float64"
+  ],
+  "sha256": "d48533f7f4e369c1559e84f9af2f0b48b40f95e29a9f6f007f656f9ca44a72bb",
+  "shape": [
+   102,
+   3573
+  ]
+ },
+ "load_wide_close_syms_2024": {
+  "columns_head": [
+   "360ONE",
+   "AAKAAR",
+   "BAJFINANCE",
+   "ETERNAL",
+   "GULFPETRO",
+   "HDFCBANK",
+   "INFY",
+   "IRCTC",
+   "ITC",
+   "JETAIRWAYS",
+   "KMSUGAR",
+   "LTM",
+   "MOM30IETF",
+   "RELIANCE",
+   "SUNTV",
+   "TCS",
+   "TMPV"
+  ],
+  "dtypes": [
+   "float64"
+  ],
+  "sha256": "4c93da29c2b5b14884666c5ec0d0373088c8a75485797c21fc27039ff7f4bf30",
+  "shape": [
+   698,
+   17
+  ]
+ },
+ "load_wide_volume_active_2025": {
+  "columns_head": [
+   "20MICRONS",
+   "21STCENMGM",
+   "360ONE",
+   "3BBLACKBIO",
+   "3IINFOLTD",
+   "3MINDIA",
+   "3PLAND",
+   "5PAISA",
+   "63MOONS",
+   "A2ZINFRA",
+   "AAATECH",
+   "AADHARHFC",
+   "AAKASH",
+   "AAREYDRUGS",
+   "AARNAV",
+   "AARON",
+   "AARTECH",
+   "AARTIDRUGS",
+   "AARTIIND",
+   "AARTIPHARM"
+  ],
+  "dtypes": [
+   "Int64"
+  ],
+  "sha256": "f085eb667aa3fac49a62f6f3a7e9d49474adc453f29284819397c35356d40569",
+  "shape": [
+   449,
+   2980
+  ]
+ },
+ "master_frame": {
+  "columns_head": [
+   "key",
+   "symbol",
+   "series",
+   "isin",
+   "is_sme",
+   "first_date",
+   "last_date",
+   "status",
+   "previous_symbols",
+   "previous_isins",
+   "notes"
+  ],
+  "dtypes": [
+   "bool",
+   "datetime64[us]",
+   "str"
+  ],
+  "sha256": "8c5f1acf16626c8b140a25f77155bf1b4092f76e3b24d8d0b67e59b25f8fb3d5",
+  "shape": [
+   4583,
+   11
+  ]
+ },
+ "resolve_symbols": {
+  "len": 20,
+  "sha256": "7b479db6969c92aa239eafb354aa6a3d08a1cb580486156ffbeb9e6fa54dc446"
+ },
+ "store_last_dates": {
+  "columns_head": [
+   "0"
+  ],
+  "dtypes": [
+   "datetime64[ns]"
+  ],
+  "sha256": "c80195f1811cc16c86c0f50b5822063eb813285575633ab9e5ca5efe4de0e0dc",
+  "shape": [
+   4583,
+   1
+  ]
+ }
+}

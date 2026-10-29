@@ -1,0 +1,8 @@
+Security Wise Delivery Position - Compulsory Rolling Settlement
+10,MTO,03012005,1234567,0000001
+Trade Date <03-JAN-2005>,Settlement Type <N>,Settlement No <2005001>,Settlement Date <05-JAN-2005>
+Record Type,Sr No,Name of Security,Type,Quantity Traded,Deliverable Quantity(gross across client level),% of Deliverable Quantity to Traded Quantity
+20,1,20MICRONS,EQ,12345,6000,48.60
+20,2,ABB,EQ,2000,1500,75.00
+20,3,ABB,BE,10,10,100.00
+20,4,GOI2030,GS,5,5,100.00
