@@ -47,6 +47,40 @@ BREADTH_COLUMNS = [
 
 
 def _load_wide(store: Store, keys: List[str], progress: Optional[Callable] = None):
+    """Adjusted high/low/close as date x key float32 frames (columns in `keys` order)."""
+    scanned = store.scan(keys, ["date", "high", "low", "close", "adj_factor"])
+    if scanned is None:
+        return _load_wide_by_file(store, keys, progress)
+    df, owner = scanned
+    if progress and keys:
+        progress(len(keys), len(keys), keys[-1])
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    af = df["adj_factor"].to_numpy()
+    owners, kcode = np.unique(owner, return_inverse=True)  # rows come in `keys` order
+    dates, dcode = np.unique(df["date"].to_numpy(), return_inverse=True)
+    columns = pd.Index([keys[i] for i in owners])
+    index = pd.DatetimeIndex(dates, name="date")
+    # Store.write keeps every file sorted by date without duplicates; otherwise fall back to
+    # drop_duplicates (first row per date wins, as in _load_wide_by_file) + pivot
+    clean = bool(np.all((np.diff(dcode) > 0) | (np.diff(kcode) != 0)))
+    if not clean:
+        df = df.assign(key=np.asarray(keys, dtype=object)[owner]).drop_duplicates(["key", "date"])
+        af = df["adj_factor"].to_numpy()
+
+    def wide(col: str) -> pd.DataFrame:
+        v = (df[col] / af).astype("float32")
+        if not clean:
+            w = pd.DataFrame({"date": df["date"], "key": df["key"], "v": v}).pivot(index="date", columns="key", values="v")
+            return w.reindex(columns=columns).rename_axis(columns=None)
+        arr = np.full((len(dates), len(owners)), np.nan, dtype="float32")
+        arr[dcode, kcode] = v.to_numpy()
+        return pd.DataFrame(arr, index=index, columns=columns)
+
+    return wide("high"), wide("low"), wide("close")
+
+
+def _load_wide_by_file(store: Store, keys: List[str], progress: Optional[Callable] = None):
     highs, lows, closes = {}, {}, {}
     n = len(keys)
     for i, key in enumerate(keys, 1):
