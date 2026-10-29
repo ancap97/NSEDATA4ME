@@ -25,6 +25,7 @@ import pandas as pd
 from adjuster import load_actions as _load_actions
 from breadth import load_breadth as _load_breadth
 from config import STORE_COLUMNS
+import symbol_master
 from storage import IndexStore, Store
 from symbol_master import EntityResolver, load_master
 
@@ -63,9 +64,27 @@ def list_symbols(include_delisted: bool = True, include_sme: bool = False) -> pd
     return m.reset_index(drop=True)
 
 
+_resolver_cache: dict = {}
+
+
+def _resolver() -> EntityResolver:
+    """EntityResolver.load(), reused while symbol_state.json is unchanged (sync replaces the
+    file on every save, so its mtime/size change). Resolving symbols only reads it."""
+    path = symbol_master.STATE_FILE
+    try:
+        st = path.stat()
+        sig = (str(path), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return EntityResolver.load(path)
+    hit = _resolver_cache.get("state")
+    if hit is None or hit[0] != sig:
+        hit = _resolver_cache["state"] = (sig, EntityResolver.load(path))
+    return hit[1]
+
+
 def resolve_symbols(symbols: Iterable[str], include_sme: bool = False) -> List[str]:
     """Map current or historical symbols to store keys."""
-    resolver = EntityResolver.load()
+    resolver = _resolver()
     keys = []
     for s in symbols:
         s = s.upper().strip()

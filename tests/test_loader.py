@@ -235,3 +235,26 @@ def test_store_scan_declines_mixed_file_schemas(data_dir):
     assert s.scan(["A", "B"], ["date", "close"]) is not None
     base.assign(date=base["date"].astype("datetime64[us]")).to_parquet(s.path("B"), index=False)
     assert s.scan(["A", "B"], ["date", "close"]) is None  # date unit differs
+
+
+def test_resolver_cache_follows_state_file(db, loader):
+    import os
+
+    from symbol_master import EntityResolver
+
+    state = db["dir"] / "symbol_state.json"
+    original = state.read_bytes()
+    try:
+        assert loader.resolve_symbols(["OLDNAME"]) == ["NEWNAME"]
+        assert loader._resolver() is loader._resolver()  # unchanged file: parsed once
+        r = EntityResolver.load()
+        r.resolve_day(pd.DataFrame({"symbol": ["FRESH"], "series": ["EQ"], "isin": ["INE999Q01011"]}),
+                      factory.DAYS[-1])
+        r.save()  # sync's tmp + replace: new mtime/size
+        assert loader.resolve_symbols(["FRESH"]) == ["FRESH"]
+        os.utime(state)  # touched without a content change: a reload is harmless
+        assert loader.resolve_symbols(["OLDNAME", "FRESH"]) == ["NEWNAME", "FRESH"]
+    finally:
+        state.write_bytes(original)
+    with pytest.raises(KeyError):
+        loader.resolve_symbols(["FRESH"])

@@ -23,7 +23,7 @@ def test_load_wide_scan_matches_file_by_file(data_dir):
     factory.build_db()
     s = Store()
     keys = ["NEWNAME", "AAA", "DEAD", "NOFILE", "BBB", "MIG", "DUP"]
-    high, low, close = _assert_wide_equal(s, keys)
+    _, _, close = _assert_wide_equal(s, keys)
     assert list(close.columns) == ["NEWNAME", "AAA", "DEAD", "BBB", "MIG", "DUP"]
     assert close.dtypes.unique().tolist() == [np.dtype("float32")] and close.index.name == "date"
     # adjusted: the AAA split ex 2024-01-08 leaves no gap in the adjusted close
