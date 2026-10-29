@@ -202,6 +202,27 @@ def test_interrupted_day_is_rolled_back(nse):
     assert D[BASE] not in store_dates("AAA") and meta()["in_progress"] is None
 
 
+def test_resolver_saved_before_day_is_marked_committed(nse, monkeypatch):
+    """A crash right after meta.json records a day as committed must not leave the identity
+    state (symbol_state.json) a day behind the store."""
+    publish(date(2024, 1, 29))
+    real = sync.save_meta
+
+    def crash_after_commit(m, *a, **kw):
+        real(m, *a, **kw)
+        if m.get("in_progress") is None and m.get("last_synced") == "2024-01-29":
+            raise KeyboardInterrupt  # process killed here
+
+    monkeypatch.setattr(sync, "save_meta", crash_after_commit)
+    with pytest.raises(KeyboardInterrupt):
+        nse(ist(2024, 1, 29, 19, 0))
+    from symbol_master import EntityResolver
+
+    assert meta()["last_synced"] == "2024-01-29"
+    r = EntityResolver.load()
+    assert r.entities["AAA"].last_date == "2024-01-29" and "DUP" in r.entities
+
+
 def test_database_missing_exits(data_dir, monkeypatch):
     monkeypatch.setattr(sync, "NSEClient", FakeNSE)
     with pytest.raises(SystemExit, match="database not found"):

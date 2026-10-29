@@ -339,14 +339,15 @@ def run_sync(
             save_meta(meta)
 
         def on_committed(d: date, keys: List[str]) -> None:
+            # persist identity state with the rows it describes, before the day is marked
+            # committed, so a crash between two days cannot leave the resolver behind the store
+            # (re-resolving a rolled-back day with the saved state is idempotent)
+            resolver.save()
             meta["in_progress"] = None
             meta["last_synced"] = max(meta["last_synced"], d.isoformat())
             if not has_delivery(d):
                 meta.setdefault("pending_delivery", []).append(d.isoformat())
             save_meta(meta)
-            # persist identity state with the rows it describes, so a crash between two
-            # days cannot leave the resolver behind the store
-            resolver.save()
             summary["ingested"].append(d.isoformat())
             idx = load_indices_day(d)
             if idx is None and raw_path("indices", d).exists():
