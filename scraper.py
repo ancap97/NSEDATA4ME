@@ -180,18 +180,21 @@ class NSEClient:
         self._cookies_at = time.monotonic()
 
     def _get(self, url: str, params: Optional[dict] = None, stream: bool = False) -> requests.Response:
-        last_exc: Optional[Exception] = None
+        last_err: object = None  # exception or "HTTP <status>" of the latest failed attempt
         for attempt in range(MAX_RETRIES):
             self._throttle()
             try:
                 r = self.session.get(url, params=params, timeout=self.timeout, stream=stream)
             except requests.RequestException as e:
-                last_exc = e
+                last_err = e
                 backoff = min(2 ** (attempt + 1), 30) + random.uniform(0, 1)
                 logger.info("request error %s (attempt %d) - retry in %.0fs", e, attempt + 1, backoff)
                 time.sleep(backoff)
                 continue
 
+            if r.status_code != 200:
+                r.close()  # a streamed response holds its connection until closed
+                last_err = f"HTTP {r.status_code}"
             if r.status_code == 404:
                 raise ReportUnavailable(url)
             if r.status_code in (401, 403):
@@ -207,7 +210,7 @@ class NSEClient:
             if r.status_code != 200:
                 raise ConnectionError(f"HTTP {r.status_code} for {url}")
             return r
-        raise ConnectionError(f"giving up on {url}: {last_exc}")
+        raise ConnectionError(f"giving up on {url}: {last_err}")
 
     # -- JSON API ------------------------------------------------------------
     def api(self, endpoint: str, params: Optional[dict] = None):

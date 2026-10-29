@@ -237,3 +237,17 @@ def test_missing_dates_write_is_atomic(data_dir, monkeypatch):
         m.add("bhav", date(2024, 1, 3))
     monkeypatch.setattr(Path, "write_text", real)
     assert json.loads(scraper.MISSING_DATES_FILE.read_text())["bhav"] == [OLD_DAY.isoformat()]
+
+
+def test_retried_responses_are_closed(client):
+    """Streamed responses that are retried must be closed so the connection returns to the pool."""
+    bad = [FakeResponse(503), FakeResponse(429), FakeResponse(403)]
+    script(client, bad[0], bad[1], bad[2], FakeResponse(200), FakeResponse(200, b"x"))  # 4th: cookie refresh
+    client._get("https://x/a")
+    assert [r.closed for r in bad] == [True, True, True]
+
+
+def test_give_up_message_names_last_status(client):
+    script(client, *[FakeResponse(403) if i % 2 == 0 else FakeResponse(200) for i in range(2 * scraper.MAX_RETRIES)])
+    with pytest.raises(ConnectionError, match="HTTP 403"):
+        client._get("https://x/a")
