@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from symbol_master import EntityResolver, make_key
 
@@ -104,3 +105,41 @@ def test_resolving_an_older_day_again_keeps_latest_state():
         ("OLD", "2024-01-01", "2024-01-01"), ("NEW", "2024-01-03", "2024-01-03")]
     assert [(p.from_date, p.to_date) for p in e.isins] == [("2024-01-01", "2024-01-03")]
     assert r.entities["B"].last_date == "2024-01-03"
+
+
+def test_master_write_failure_keeps_previous_files(data_dir, monkeypatch):
+    """A crash while writing symbol_master.parquet / isin_symbol_map.json must leave the previous
+    files readable (every loader call reads the master)."""
+    from pathlib import Path
+
+    import config
+    import symbol_master
+
+    r = EntityResolver()
+    r.resolve_day(day(("A", "EQ", "I1")), date(2024, 1, 1))
+    r.save_outputs()
+    before = symbol_master.load_master()
+    history = config.SYMBOL_HISTORY_FILE.read_text()
+    r.resolve_day(day(("B", "EQ", "I2")), date(2024, 1, 2))
+
+    real_parquet, real_text = pd.DataFrame.to_parquet, Path.write_text
+
+    def torn_parquet(self, path, *a, **kw):
+        Path(path).write_bytes(b"PAR1 torn")
+        raise OSError("killed mid-write")
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", torn_parquet)
+    with pytest.raises(OSError):
+        r.save_outputs()
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", real_parquet)
+    pd.testing.assert_frame_equal(symbol_master.load_master(), before)
+
+    def torn_text(self, data, *a, **kw):
+        real_text(self, data[:10], *a, **kw)
+        raise OSError("killed mid-write")
+
+    monkeypatch.setattr(Path, "write_text", torn_text)
+    with pytest.raises(OSError):
+        r.save_outputs()
+    monkeypatch.setattr(Path, "write_text", real_text)
+    assert config.SYMBOL_HISTORY_FILE.read_text() == history

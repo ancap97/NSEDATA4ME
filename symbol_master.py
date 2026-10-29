@@ -77,6 +77,16 @@ class Entity:
         return self.key.endswith("_SME")
 
 
+def _write_atomic(path: Path, write) -> None:
+    """write(tmp) next to path, then rename over it: readers never see a torn file."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        write(tmp)
+        tmp.replace(path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def make_key(symbol: str, series: str) -> str:
     return f"{symbol}_SME" if series in SME_SERIES else symbol
 
@@ -286,8 +296,9 @@ class EntityResolver:
     def save_outputs(self, as_of: Optional[date] = None) -> pd.DataFrame:
         master = self.master_frame(as_of)
         SYMBOL_MASTER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        master.to_parquet(SYMBOL_MASTER_FILE, index=False)
-        SYMBOL_HISTORY_FILE.write_text(self.history_json())
+        _write_atomic(SYMBOL_MASTER_FILE, lambda tmp: master.to_parquet(tmp, index=False))
+        history = self.history_json()
+        _write_atomic(SYMBOL_HISTORY_FILE, lambda tmp: tmp.write_text(history))
         self.save()
         return master
 

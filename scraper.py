@@ -133,7 +133,9 @@ class MissingDates:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({k: sorted(v) for k, v in self._sets.items()}, indent=1))
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps({k: sorted(v) for k, v in self._sets.items()}, indent=1))
+        tmp.replace(self.path)
 
 
 def log_failed_date(kind: str, d: date, reason: str) -> None:

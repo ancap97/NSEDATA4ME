@@ -219,3 +219,21 @@ def test_failed_extraction_keeps_previous_file(client):
         client.download_report("bhav", OLD_DAY, force=True)
     assert p.read_text() == "good"
     assert [x.name for x in p.parent.iterdir()] == [p.name]
+
+
+def test_missing_dates_write_is_atomic(data_dir, monkeypatch):
+    from pathlib import Path
+
+    m = scraper.MissingDates()
+    m.add("bhav", OLD_DAY)
+    real = Path.write_text
+
+    def torn(self, data, *a, **kw):
+        real(self, data[:5], *a, **kw)
+        raise OSError("killed mid-write")
+
+    monkeypatch.setattr(Path, "write_text", torn)
+    with pytest.raises(OSError):
+        m.add("bhav", date(2024, 1, 3))
+    monkeypatch.setattr(Path, "write_text", real)
+    assert json.loads(scraper.MISSING_DATES_FILE.read_text())["bhav"] == [OLD_DAY.isoformat()]
