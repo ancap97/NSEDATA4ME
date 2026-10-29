@@ -307,6 +307,7 @@ class IndexStore:
         self.dir = directory
         self.dir.mkdir(parents=True, exist_ok=True)
         self._names: Optional[Dict[str, str]] = None  # slug -> stored index name
+        self._last_dates: Optional[Dict[str, str]] = None  # slug -> str(last date), "" if unreadable
 
     @staticmethod
     def slug(name: str) -> str:
@@ -315,10 +316,19 @@ class IndexStore:
     def path(self, name: str) -> Path:
         return self.dir / f"{self.slug(name)}.parquet"
 
-    def _stored_names(self) -> Dict[str, str]:
+    def _stored_names(self, with_dates: bool = False) -> Dict[str, str]:
         if self._names is None:
-            self._names = {}
+            # with_dates (list_names): one read per file for the stored name and the last date
+            self._names, self._last_dates = {}, ({} if with_dates else None)
             for p in sorted(self.dir.glob("*.parquet")):
+                if with_dates:
+                    try:
+                        df = pd.read_parquet(p, columns=["index", "date"])
+                        self._names[p.stem] = df["index"].iloc[-1] if len(df) else p.stem
+                        self._last_dates[p.stem] = str(df["date"].max())
+                        continue
+                    except Exception:  # judge the two columns separately, as before
+                        pass
                 try:
                     nm = pd.read_parquet(p, columns=["index"])["index"]
                     self._names[p.stem] = nm.iloc[-1] if len(nm) else p.stem
@@ -326,18 +336,23 @@ class IndexStore:
                     self._names[p.stem] = p.stem
         return self._names
 
+    def _last_date(self, slug: str) -> str:
+        if self._last_dates is not None and slug in self._last_dates:
+            return self._last_dates[slug]
+        try:
+            return str(pd.read_parquet(self.dir / f"{slug}.parquet", columns=["date"])["date"].max())
+        except Exception:
+            return ""
+
     def list_names(self, canonical: bool = True) -> List[str]:
-        names = list(self._stored_names().values())
+        names = list(self._stored_names(with_dates=canonical).values())
         if not canonical:
             return names
         # latest stored name per canonical group (Nifty 50 rather than CNX Nifty)
         best: Dict[str, Tuple[str, str]] = {}
-        for slug, nm in self._stored_names().items():
+        for slug, nm in self._stored_names(with_dates=True).items():
             key = canonical_index_name(nm)
-            try:
-                last = str(pd.read_parquet(self.dir / f"{slug}.parquet", columns=["date"])["date"].max())
-            except Exception:
-                last = ""
+            last = self._last_date(slug)
             if key not in best or last > best[key][0]:
                 best[key] = (last, nm)
         return sorted(v[1] for v in best.values())
@@ -362,6 +377,7 @@ class IndexStore:
         df["date"] = pd.to_datetime(df["date"]).astype("datetime64[ns]")
         df = df.sort_values("date", kind="stable").drop_duplicates(subset="date", keep="last").reset_index(drop=True)
         _atomic_parquet(df, self.path(name))
+        self._last_dates = None
 
     def append(self, name: str, rows: pd.DataFrame) -> None:
         if self.path(name).exists():
@@ -372,9 +388,11 @@ class IndexStore:
         for name, grp in day.groupby("index", sort=False):
             self.append(name, grp)
         self._names = None
+        self._last_dates = None
 
     def remove_dates(self, dates: Iterable[date]) -> None:
         stamps = {pd.Timestamp(d) for d in dates}
+        self._last_dates = None
         for p in self.dir.glob("*.parquet"):
             df = pd.read_parquet(p)
             mask = df["date"].isin(stamps)

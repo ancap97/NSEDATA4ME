@@ -233,3 +233,21 @@ def test_parallel_workers_env(monkeypatch):
     assert storage.parallel_workers() == 1  # library use (run_sync from a script): in-process
     monkeypatch.setattr(storage, "_PARALLEL_ALLOWED", True)
     assert 1 <= storage.parallel_workers() <= 4  # the sync.py command
+
+
+def test_index_list_names_sees_writes_through_cache(data_dir):
+    """Last dates are cached with the names; a write through the same IndexStore must still count."""
+    from storage import IndexStore
+
+    ist = IndexStore()
+    cols = ["date", "index", "open", "high", "low", "close", "volume", "turnover_cr", "pe", "pb", "div_yield"]
+    mk = lambda d, n: pd.DataFrame([[pd.Timestamp(d), n, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0, 1.0]], columns=cols)
+    ist.write("CNX Nifty", mk("2015-11-06", "CNX Nifty"))
+    ist.write("Nifty 50", mk("2015-11-05", "Nifty 50"))
+    assert ist.list_names() == ["CNX Nifty"]  # latest file wins the canonical group
+    ist.write("Nifty 50", pd.concat([mk("2015-11-05", "Nifty 50"), mk("2015-11-09", "Nifty 50")]))
+    assert ist.list_names() == ["Nifty 50"]
+    (ist.dir / "broken.parquet").write_bytes(b"not parquet")
+    fresh = IndexStore()
+    assert fresh.list_names(canonical=False) == ["broken", "CNX Nifty", "Nifty 50"]
+    assert "broken" in fresh.list_names()
