@@ -23,6 +23,7 @@ import pandas as pd
 
 from adjuster import load_actions as _load_actions
 from breadth import load_breadth as _load_breadth
+from config import STORE_COLUMNS
 from storage import IndexStore, Store
 from symbol_master import EntityResolver, load_master
 
@@ -34,6 +35,17 @@ QTY_COLS = ("volume", "deliv_qty")
 
 def _ts(d: DateLike) -> Optional[pd.Timestamp]:
     return None if d is None else pd.Timestamp(d)
+
+
+def _store_columns(columns: Optional[List[str]], adjusted: bool) -> Optional[List[str]]:
+    """Store columns needed to produce `columns` (None = read everything).
+
+    `date` is always needed (filters, sort); `adj_factor` when adjusting. `symbol` and `key`
+    are set from the symbol master, so they are never read."""
+    if not columns:
+        return None
+    need = set(columns) | {"date"} | ({"adj_factor"} if adjusted else set())
+    return [c for c in STORE_COLUMNS if c in need and c != "symbol"]
 
 
 def list_symbols(include_delisted: bool = True, include_sme: bool = False) -> pd.DataFrame:
@@ -89,9 +101,10 @@ def load_data(
 
     start, end = _ts(start_date), _ts(end_date)
     current_symbol = dict(zip(master["key"], master["symbol"])) if not master.empty else {}
+    read_cols = _store_columns(columns, adjusted)
     frames = []
     for key in keys:
-        df = store.read(key)
+        df = store.read(key, columns=read_cols)
         if df.empty:
             continue
         if start is not None:
@@ -111,11 +124,15 @@ def load_data(
     if adjusted:
         af = out["adj_factor"]
         for c in PRICE_COLS:
-            out[c] = out[c] / af
+            if c in out:
+                out[c] = out[c] / af
         for c in QTY_COLS:
-            out[c] = (out[c].astype("Float64") * af).round().astype("Int64")
+            if c in out:
+                out[c] = (out[c].astype("Float64") * af).round().astype("Int64")
     out = out.sort_values(["symbol", "date"]).reset_index(drop=True)
     cols = ["date", "symbol", "key", "isin", "series", *PRICE_COLS, "volume", "turnover", "trades", "deliv_qty", "deliv_pct", "adj_factor"]
+    if read_cols is not None:  # only the requested columns were read
+        cols = [c for c in cols if c in out.columns]
     out = out.loc[:, cols]
     if columns:
         out = out.loc[:, [c for c in columns if c in out.columns]]

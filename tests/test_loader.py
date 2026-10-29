@@ -152,3 +152,20 @@ def test_load_actions(loader):
     bbb = loader.load_actions("BBB")
     assert list(bbb["type"]) == ["DIVIDEND", "BONUS"]
     assert list(loader.load_actions("BBB", adjusting_only=True)["type"]) == ["BONUS"]
+
+
+@pytest.mark.parametrize("adjusted", [True, False])
+@pytest.mark.parametrize(
+    "columns",
+    [["close"], ["date", "symbol", "close", "volume"], ["volume", "deliv_qty", "turnover"], ["key"],
+     ["isin", "series", "trades"], ["adj_factor", "prev_close"], ["nonexistent"], ["symbol", "key", "date"]],
+)
+def test_columns_arg_equals_full_load_then_select(loader, columns, adjusted):
+    """Reading only the needed store columns must give exactly the full result's columns."""
+    kw = {"start_date": "2024-01-03", "include_sme": True, "adjusted": adjusted}
+    full = loader.load_data(**kw)
+    got = loader.load_data(columns=columns, **kw)
+    pd.testing.assert_frame_equal(got, full.loc[:, [c for c in columns if c in full.columns]])
+    sym = loader.load_data(["OLDNAME", "AAA"], columns=columns, **kw)
+    sym_full = loader.load_data(["OLDNAME", "AAA"], **kw)
+    pd.testing.assert_frame_equal(sym, sym_full.loc[:, [c for c in columns if c in sym_full.columns]])
