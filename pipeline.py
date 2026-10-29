@@ -44,11 +44,12 @@ def holiday_key(d: date) -> str:
 def is_candidate_trading_day(d: date, holidays: Dict[str, str], special_sessions: List[str]) -> bool:
     if d.isoformat() in special_sessions:
         return True
+    desc = holidays.get(holiday_key(d))
+    # Muhurat trading day: market open, also when Diwali falls on a weekend
+    if desc and "laxmi pujan" in desc.lower():
+        return True
     if d.weekday() >= 5:
         return False
-    desc = holidays.get(holiday_key(d))
-    if desc and "laxmi pujan" in desc.lower():  # Muhurat trading day: market open
-        return True
     return desc is None
 
 

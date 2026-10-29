@@ -30,6 +30,16 @@ def test_candidate_dates_weekends_holidays_special_sessions():
     assert pipeline.candidate_dates(date(2024, 1, 31), date(2024, 1, 31), hol, []) == []
 
 
+def test_muhurat_session_on_a_weekend_is_a_candidate():
+    # NSE's 2026 list: "08-Nov-2026 Diwali Laxmi Pujan*" is a Sunday with a Muhurat session
+    # (the store has earlier weekend ones, e.g. 2023-11-12 and 2016-10-30)
+    hol = {"08-Nov-2026": "Diwali Laxmi Pujan*", "10-Nov-2026": "Diwali-Balipratipada"}
+    assert pipeline.is_candidate_trading_day(date(2026, 11, 8), hol, [])
+    got = pipeline.candidate_dates(date(2026, 11, 6), date(2026, 11, 11), hol, [])
+    assert got == [date(2026, 11, 8), date(2026, 11, 9), date(2026, 11, 11)]
+    assert not pipeline.is_candidate_trading_day(date(2026, 11, 7), hol, [])  # plain Saturday
+
+
 @pytest.mark.parametrize(
     "now, expected",
     [
