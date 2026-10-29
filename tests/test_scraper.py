@@ -201,3 +201,21 @@ def test_missing_dates_tolerates_corrupt_file(data_dir):
     m.add("bhav", OLD_DAY)
     m.remove("bhav", OLD_DAY)
     assert json.loads(scraper.MISSING_DATES_FILE.read_text())["bhav"] == []
+
+
+def test_failed_extraction_keeps_previous_file(client):
+    """A forced re-download (--redo-date) that delivers a corrupt zip must not truncate the
+    good bhavcopy already on disk, and must not leave a partial file that later runs trust."""
+    import zipfile
+
+    p = scraper.raw_path("bhav", OLD_DAY)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("good")
+    body = bytearray(zip_bytes("cm02JAN2024bhav.csv", "SYMBOL\n" + "X\n" * 100))
+    i = body.index(b"X\nX\n")
+    body[i] = ord("Y")  # corrupt the stored data -> CRC mismatch on extraction
+    script(client, FakeResponse(200, bytes(body), "application/zip"))
+    with pytest.raises(zipfile.BadZipFile):
+        client.download_report("bhav", OLD_DAY, force=True)
+    assert p.read_text() == "good"
+    assert [x.name for x in p.parent.iterdir()] == [p.name]

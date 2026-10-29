@@ -307,8 +307,15 @@ class NSEClient:
             if not names:
                 raise ReportUnavailable(str(zip_tmp))
             member = next((n for n in names if n.lower().endswith(".csv")), names[0])
-            with zf.open(member) as src, dest.open("wb") as out:
-                out.write(src.read())
+            # extract next to dest and rename: an interrupted or corrupt extraction must not
+            # leave a truncated report that later runs would treat as downloaded
+            part = dest.with_name(dest.name + ".tmp")
+            try:
+                with zf.open(member) as src, part.open("wb") as out:
+                    out.write(src.read())
+                part.replace(dest)
+            finally:
+                part.unlink(missing_ok=True)
 
     def download_delivery(self, d: date, force: bool = False) -> Optional[Path]:
         """Delivery data: sec_bhavdata_full from 2019, MTO before (fallback both)."""
