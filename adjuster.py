@@ -24,7 +24,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
