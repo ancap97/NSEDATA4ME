@@ -83,6 +83,9 @@ Notes
 
 Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked on `main`), then sync.
 
+`sync.py` rewrites the security files of large batches (a day's ~3,400 appends, `--redo-date`) in
+a few worker processes; set `$env:NSE_SYNC_WORKERS = 1` to keep it in one process.
+
 **Why data is not on `main`:** every sync rewrites thousands of compressed Parquet files, so each
 data commit would add ~400 MB of history that git can never reuse. `publish_data.py` writes a
 fresh parentless commit on the `data` branch and force-pushes it, replacing the previous snapshot
@@ -90,6 +93,27 @@ instead of stacking on it, so the repo stays about one snapshot in size.
 
 **Using more than one computer:** take the snapshot before syncing, and refresh the branch after.
 Don't sync on two machines in between — the Parquet files can't be merged.
+
+## Running tests
+
+```powershell
+.venv\Scripts\pip install pytest
+.venv\Scripts\python -m pytest -q            # offline: fixtures + a small synthetic database, ~1.5 min
+```
+
+The suite never touches `data/` or the network (every data path is redirected to a temporary
+folder and HTTP is blocked). Optionally check the read API against a real snapshot: the digests in
+`tests/golden/golden_hashes.json` were recorded from `data` branch commit `fcb3714` (data through
+2026-10-26, pandas 3.0 / pyarrow 26) and must match exactly.
+
+```powershell
+git fetch --depth 1 origin data:refs/remotes/origin/data
+git worktree add --detach ..\nse-data origin/data
+.venv\Scripts\python -m tests.golden.golden check ..\nse-data\data    # exit 1 on any difference
+# or through pytest:  $env:NSE_GOLDEN_DATA = "..\nse-data\data"; .venv\Scripts\python -m pytest tests\test_golden.py
+```
+
+After refreshing the `data` branch, re-record with `python -m tests.golden.golden record <dir>`.
 
 ## Layout
 
@@ -102,6 +126,7 @@ data/store/      one Parquet per security (unadjusted + adj_factor)
 data/indices/    NSE indices             data/breadth/  market breadth
 data/actions/    corporate actions       data/raw/      downloaded NSE reports
 data/meta.json   sync state              data/logs/     sync log + status
+tests/           offline test suite      docs/REVIEW.md code review notes
 ```
 
 On `main` only `data/actions/manual_overrides.csv` is tracked. The processed data (`store`,
