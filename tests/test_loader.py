@@ -156,6 +156,15 @@ def test_load_actions(loader):
     assert list(loader.load_actions("BBB", adjusting_only=True)["type"]) == ["BONUS"]
 
 
+def test_load_actions_adjusting_only_includes_demergers(loader, monkeypatch):
+    import adjuster
+
+    t = adjuster.load_actions()
+    extra = t.iloc[[0]].assign(type="DEMERGER", factor=1.25, key="AAA", symbol="AAA")
+    monkeypatch.setattr(loader, "_load_actions", lambda: pd.concat([t, extra], ignore_index=True))
+    assert "DEMERGER" in set(loader.load_actions("AAA", adjusting_only=True)["type"])
+
+
 @pytest.mark.parametrize("adjusted", [True, False])
 @pytest.mark.parametrize(
     "columns",

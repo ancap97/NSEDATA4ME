@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 import symbol_master
+from adjuster import ADJUSTING_TYPES
 from adjuster import load_actions as _load_actions
 from breadth import load_breadth as _load_breadth
 from config import STORE_COLUMNS
@@ -221,5 +222,5 @@ def load_actions(symbol: Optional[str] = None, adjusting_only: bool = False) -> 
         key = resolve_symbols([symbol], include_sme=True)[0]
         df = df[df["key"] == key]
     if adjusting_only:
-        df = df[df["type"].isin(("SPLIT", "BONUS", "CONSOLIDATION"))]
+        df = df[df["type"].isin(ADJUSTING_TYPES)]
     return df.sort_values("ex_date").reset_index(drop=True)

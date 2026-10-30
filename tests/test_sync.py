@@ -280,3 +280,6 @@ def test_changed_action_keys():
     b = a.assign(factor=[2.0, 1.5])
     assert sync.changed_action_keys(a, b) == {"B"}
     assert sync.changed_action_keys(a, a) == set()
+    # an unapplied (factor-less) adjusting row is not a change on every run
+    c = pd.concat([a, a.iloc[[0]].assign(key="C", type="DEMERGER", factor=float("nan"))], ignore_index=True)
+    assert sync.changed_action_keys(c, c.copy()) == set()

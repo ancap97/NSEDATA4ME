@@ -25,7 +25,7 @@ from adjuster import classify, compute_adj_factor
         ("Bon 1:2", [("BONUS", 1.5, None)]),
         ("Bonus Debentures 1:1", []),  # debenture bonus is not an equity bonus
         ("Rights 1:5 @ Premium Rs 100", [("RIGHTS", None, None)]),
-        ("Demerger", [("SCHEME", None, None)]),
+        ("Demerger", [("DEMERGER", None, None)]),
         ("Buy Back", [("BUYBACK", None, None)]),
         ("FV SPLIT RS 10 TO [TRUNCATED]", [("SPLIT_UNPARSED", None, None)]),
         ("", []),
@@ -263,3 +263,94 @@ def test_apply_adjustments_and_verify(data_dir):
     wrong = good.assign(factor=5.0)
     _, warn = adjuster.apply_adjustments(s, wrong, keys=["AAA", "MISSING"])
     assert len(warn) == 1 and warn["issue"].iloc[0] == "adjusted close jump across ex-date"
+
+
+# ------------------------------------------------------------------ demergers
+
+
+def test_classify_demerger():
+    assert classify("Demerger") == [("DEMERGER", None, None)]
+    assert classify("De-Merger Of Hotels Business") == [("DEMERGER", None, None)]
+    assert classify("Scheme Of Arrangement") == [("SCHEME", None, None)]
+    assert classify("SCHEME OF AMALGAMATION") == [("SCHEME", None, None)]
+
+
+def test_factor_applies_demerger():
+    acts = _acts(("2024-01-03", "DEMERGER", 1.6), ("2024-01-05", "BONUS", 2.0))
+    assert compute_adj_factor(DATES, acts).tolist() == pytest.approx([3.2, 3.2, 2.0, 2.0, 1.0])
+
+
+def _demerger_store(data_dir, key="PARENT", opens=None, closes=None, dates=None):
+    from storage import Store
+
+    dates = dates if dates is not None else pd.bdate_range("2024-01-01", periods=6)
+    closes = closes or [660.0, 662.0, 660.75, 395.45, 397.0, 399.0]
+    opens = opens or [659.0, 661.0, 661.0, 400.0, 396.0, 398.0]
+    Store().write(key, pd.DataFrame({"date": dates, "symbol": key, "series": "EQ", "isin": "I", "open": opens,
+                                     "high": closes, "low": closes, "close": closes, "prev_close": closes,
+                                     "volume": 1000, "turnover": 1.0}))
+    return Store()
+
+
+def _dem_rows(*rows):
+    df = pd.DataFrame(rows, columns=["key", "ex_date", "type", "factor", "source", "purpose"])
+    df["ex_date"] = pd.to_datetime(df["ex_date"])
+    df["symbol"], df["rec_date"], df["amount"], df["hash"] = df["key"], pd.NaT, np.nan, "h"
+    return df
+
+
+def test_fill_demerger_from_ex_date_open(data_dir):
+    s = _demerger_store(data_dir)
+    acts = _dem_rows(("PARENT", "2024-01-04", "DEMERGER", np.nan, "seed", "Demerger"))
+    out = adjuster.fill_demerger_from_prices(acts, s)
+    assert out["factor"].iloc[0] == round(660.75 / 400.0, 6)
+    assert "from ex-date open" in out["purpose"].iloc[0] and out["hash"].iloc[0] != "h"
+
+
+def test_fill_demerger_divides_same_day_split_and_skips_noise(data_dir):
+    s = _demerger_store(data_dir, closes=[100, 100, 100, 18.0, 18, 18], opens=[100, 100, 100, 20.0, 18, 18])
+    acts = _dem_rows(("PARENT", "2024-01-04", "DEMERGER", np.nan, "seed", "Demerger"),
+                     ("PARENT", "2024-01-04", "SPLIT", 4.0, "api", "split"))
+    assert adjuster.fill_demerger_from_prices(acts, s)["factor"].iloc[0] == 1.25  # 100/20 = 5 = split 4 x 1.25
+    flat = _dem_rows(("PARENT", "2024-01-04", "DEMERGER", np.nan, "seed", "Demerger"),
+                     ("PARENT", "2024-01-04", "SPLIT", 5.0, "api", "split"))
+    assert np.isnan(adjuster.fill_demerger_from_prices(flat, s)["factor"].iloc[0])  # nothing left for the demerger
+    s = _demerger_store(data_dir, closes=[100, 100, 100, 101, 101, 101], opens=[100, 100, 100, 99, 101, 101])
+    small = _dem_rows(("PARENT", "2024-01-04", "DEMERGER", np.nan, "seed", "Demerger"),  # 1% gap: noise
+                      ("PARENT", "2024-03-01", "DEMERGER", np.nan, "seed", "Demerger"),  # no trading near the date
+                      ("PARENT", "2024-01-03", "DEMERGER", 1.5, "manual", "MANUAL: exact ratio"))
+    out = adjuster.fill_demerger_from_prices(small, s)
+    assert out["factor"].isna().tolist() == [True, True, False] and out["factor"].iloc[2] == 1.5
+
+
+def test_actions_table_migrates_scheme_demergers_and_applies_them(data_dir):
+    s = _demerger_store(data_dir)
+    from symbol_master import EntityResolver
+
+    r = EntityResolver()
+    r.resolve_day(pd.DataFrame({"symbol": ["PARENT"], "series": ["EQ"], "isin": ["I"]}), date(2024, 1, 1))
+    existing = _dem_rows(("PARENT", "2024-01-04", "SCHEME", np.nan, "seed", "Demerger"),
+                         ("PARENT", "2024-01-02", "SCHEME", np.nan, "seed", "Scheme Of Arrangement"))
+    t = adjuster.build_actions_table(r, [], existing=existing, store=s)
+    by_type = t.set_index("type")
+    assert set(t["type"]) == {"DEMERGER", "SCHEME"}
+    assert by_type.loc["DEMERGER", "factor"] == round(660.75 / 400.0, 6)
+    n, warn = adjuster.apply_adjustments(s, t)
+    assert n == 1 and warn.empty
+    adj = s.read("PARENT")
+    f = 660.75 / 400.0
+    assert adj["adj_factor"].round(6).tolist() == [round(f, 6)] * 3 + [1.0] * 3
+    # the adjusted close no longer shows the -40 % step on the ex-date
+    adj_close = adj["close"] / adj["adj_factor"]
+    assert abs(adj_close.iloc[3] / adj_close.iloc[2] - 395.45 / 400.0) < 1e-9
+    # rebuilding from the migrated table is stable
+    t2 = adjuster.build_actions_table(r, [], existing=t, store=s)
+    pd.testing.assert_frame_equal(t2.reset_index(drop=True), t.reset_index(drop=True))
+
+
+def test_unapplied_demerger_is_not_a_warning(data_dir):
+    s = _demerger_store(data_dir)
+    acts = _dem_rows(("PARENT", "2024-01-04", "DEMERGER", np.nan, "seed", "Demerger"),
+                     ("PARENT", "2024-01-03", "SPLIT", np.nan, "manual", "no factor given"))
+    _, warn = adjuster.apply_adjustments(s, acts)
+    assert warn["type"].tolist() == ["SPLIT"]

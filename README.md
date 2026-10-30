@@ -66,6 +66,10 @@ include_delisted=True, include_sme=False, adjusted=True, columns=None`
 
 Notes
 * Adjusted = `price / adj_factor`, `qty * adj_factor` (splits, bonuses, consolidations, demergers). Dividends and rights are **not** applied.
+* A demerger's factor is the parent's previous close / its ex-date open (the price NSE's special
+  pre-open session discovers), net of any split or bonus on the same day. Gaps under 2 % are not
+  applied (indistinguishable from an ordinary move); for an exact ratio add a `DEMERGER` row to
+  `manual_overrides.csv` with `factor` = price before / price after.
 * `symbol` is the current symbol; old names resolve (`load_symbol("INFOSYSTCH")`).
 * Use `close.shift(1)` for returns, not `prev_close` (NSE's reference price).
 * `trades` exists from 2011-06-22; delivery from 2005.
@@ -82,6 +86,7 @@ Notes
 ```
 
 Manual corporate-action fixes: add rows to `data/actions/manual_overrides.csv` (tracked on `main`), then sync.
+`type` is `SPLIT`, `BONUS`, `CONSOLIDATION` or `DEMERGER`; `action` is `add` or `ignore`.
 
 `sync.py` rewrites the security files of large batches (a day's ~3,400 appends, `--redo-date`) in
 a few worker processes; set `$env:NSE_SYNC_WORKERS = 1` to keep it in one process.

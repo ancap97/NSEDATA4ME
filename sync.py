@@ -196,7 +196,7 @@ def sync_actions(client: NSEClient, meta: dict, resolver: EntityResolver, new_pr
 
 def changed_action_keys(old: pd.DataFrame, new: pd.DataFrame) -> set:
     def sig(df: pd.DataFrame) -> set:
-        adj = df[df["type"].isin(ADJUSTING_TYPES) & df["key"].notna()]
+        adj = df[df["type"].isin(ADJUSTING_TYPES) & df["key"].notna() & df["factor"].notna()]
         return set(zip(adj["key"], adj["ex_date"].astype(str), adj["factor"].round(8)))
 
     a, b = sig(old), sig(new)
