@@ -107,7 +107,8 @@ Don't sync on two machines in between — the Parquet files can't be merged.
 .venv\Scripts\python -m pytest -q            # offline: fixtures + a small synthetic database, ~2 min
 ```
 
-The suite never touches `data/` or the network (every data path is redirected to a temporary
+GitHub Actions (`.github/workflows/tests.yml`) runs ruff's core rules and this suite on Ubuntu and
+Windows for every pull request and push to `main`. The suite never touches `data/` or the network (every data path is redirected to a temporary
 folder and HTTP is blocked). Optionally check the read API against a real snapshot: the digests in
 `tests/golden/golden_hashes.json` were recorded from `data` branch commit `fcb3714` (data through
 2026-10-26, pandas 3.0 / pyarrow 26) and must match exactly.

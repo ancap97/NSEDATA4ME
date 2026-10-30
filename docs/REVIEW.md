@@ -136,9 +136,10 @@ Not changed, because fixing them changes existing outputs or needs a design choi
    history, so `nifty_50.parquet` also holds the S&P CNX Nifty / CNX Nifty rows (3,618 rows, 911
    of them copies). Reads de-duplicate, so outputs are right; cleaning it up rewrites files.
 5. **Lint configuration.** There is no ruff config in the repo, so `ruff check .` uses each
-   installed version's defaults (0.16/0.17 here enable pyupgrade, blind-except, datetime-tz rules).
-   Suggest committing a `[tool.ruff]` section (e.g. `E4,E7,E9,F,B,I`) and running ruff + pytest in
-   a GitHub Action.
+   installed version's defaults (0.16/0.17 here enable pyupgrade, blind-except, datetime-tz rules
+   and report ~200 style findings in the existing code). CI (`.github/workflows/tests.yml`, added in
+   this PR) therefore selects the core rules explicitly (`E4,E7,E9,F`); committing a `[tool.ruff]`
+   section would make local runs match.
 6. **Holidays around New Year.** Only the current year's NSE list is kept, so `healthcheck` can
    count last December's holidays as "days behind" for a few days in January (sync itself recovers
    by inferring them).
