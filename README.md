@@ -103,7 +103,7 @@ Don't sync on two machines in between — the Parquet files can't be merged.
 
 ```powershell
 .venv\Scripts\pip install pytest
-.venv\Scripts\python -m pytest -q            # offline: fixtures + a small synthetic database, ~1.5 min
+.venv\Scripts\python -m pytest -q            # offline: fixtures + a small synthetic database, ~2 min
 ```
 
 The suite never touches `data/` or the network (every data path is redirected to a temporary
