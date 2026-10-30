@@ -111,7 +111,8 @@ def load_data(
     master = load_master()
 
     if symbols is not None:
-        keys = resolve_symbols(symbols, include_sme=True)
+        # an old and a current symbol of one security resolve to the same key: load it once
+        keys = list(dict.fromkeys(resolve_symbols(symbols, include_sme=True)))
     else:
         if master.empty:
             keys = store.list_keys()

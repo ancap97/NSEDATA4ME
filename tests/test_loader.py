@@ -193,7 +193,7 @@ def test_columns_arg_equals_full_load_then_select(loader, columns, adjusted):
         {"columns": ["close"], "start_date": None, "include_delisted": False},
         {"columns": ["close"], "start_date": "2030-01-01"},
         {"columns": ["close", "isin"]},  # string column: scan declines, file-by-file path
-        {"symbols": ["AAA", "OLDNAME", "NEWNAME"], "columns": ["close"]},  # duplicate key: declines
+        {"symbols": ["AAA", "OLDNAME", "NEWNAME"], "columns": ["close"]},  # aliases: loaded once
     ],
 )
 def test_scan_path_matches_file_by_file(loader, monkeypatch, kw):
@@ -202,8 +202,6 @@ def test_scan_path_matches_file_by_file(loader, monkeypatch, kw):
     monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 1)
     fast = loader.load_data(**kw)
     pd.testing.assert_frame_equal(fast, slow)
-    if "symbols" in kw:  # aliases of one security: load_wide raises on the duplicates either way
-        return
     wide_kw = {k: v for k, v in kw.items() if k != "columns"}
     monkeypatch.setattr(loader, "SCAN_MIN_KEYS", 10**9)
     w_slow = loader.load_wide("close", **wide_kw)
@@ -269,3 +267,13 @@ def test_resolver_cache_follows_state_file(db, loader):
         state.write_bytes(original)
     with pytest.raises(KeyError):
         loader.resolve_symbols(["FRESH"])
+
+
+def test_aliases_of_one_security_load_once(loader):
+    """An old and a current symbol of the same security in one call give its rows once."""
+    one = loader.load_data(["NEWNAME"])
+    pd.testing.assert_frame_equal(loader.load_data(["OLDNAME", "NEWNAME"]), one)
+    both = loader.load_data(["OLDNAME", "AAA", "NEWNAME", "aaa"])
+    pd.testing.assert_frame_equal(both, loader.load_data(["NEWNAME", "AAA"]))
+    w = loader.load_wide("close", symbols=["OLDNAME", "NEWNAME", "AAA"])
+    assert list(w.columns) == ["AAA", "NEWNAME"] and w.notna().all().all()
