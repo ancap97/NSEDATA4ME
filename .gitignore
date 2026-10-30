@@ -9,3 +9,7 @@
 .venv/
 __pycache__/
 *.pyc
+
+# test / lint caches
+.pytest_cache/
+.ruff_cache/

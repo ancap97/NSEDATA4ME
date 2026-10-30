@@ -12,6 +12,9 @@ BennyThadikaran/eod2 and eod2_utils (GPL-3).
 Adjustment model
   factor  SPLIT/CONSOLIDATION: old_face_value / new_face_value
           BONUS a:b           : 1 + a/b
+          DEMERGER            : parent's previous close / ex-date open (the price NSE's
+                                special pre-open session discovers), net of any split/bonus
+                                applied the same day; or the factor of a manual override
   adj_factor(row) = product of factors of all actions with ex_date > row.date
   adjusted price  = raw price / adj_factor,  adjusted volume = raw * adj_factor
 Rights issues and dividends are recorded (type RIGHTS / DIVIDEND) but never
@@ -24,7 +27,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -59,7 +62,13 @@ ACTION_COLUMNS = [
     "source",
     "hash",
 ]
-ADJUSTING_TYPES = ("SPLIT", "BONUS", "CONSOLIDATION")
+ADJUSTING_TYPES = ("SPLIT", "BONUS", "CONSOLIDATION", "DEMERGER")
+DEMERGER_RE = re.compile(r"de-?merg", re.IGNORECASE)
+# A demerger factor is measured from the ex-date price gap. Below 2 % it cannot be told apart
+# from an ordinary overnight move, so such rows stay unapplied (add a manual override instead).
+DEMERGER_MIN_FACTOR = 1.02
+DEMERGER_MAX_FACTOR = 25.0
+DEMERGER_MAX_GAP_DAYS = 7
 # PR purpose text is a truncated 25-char field, so the API-derived seed wins over it
 SOURCE_PRIORITY = {"manual": 0, "api": 1, "seed": 2, "ref": 3, "pr": 4, "price": 5}
 
@@ -213,7 +222,10 @@ def classify(purpose: str) -> List[Tuple[str, Optional[float], Optional[float]]]
         nums = [float(x) for x in DIVIDEND_RE.findall(s)]
         out.append(("DIVIDEND", None, sum(nums) if nums else None))
 
-    if not out and ("demerger" in s or "amalgamation" in s or "scheme" in s or "arrangement" in s):
+    if not out and DEMERGER_RE.search(s):
+        out.append(("DEMERGER", None, None))
+
+    if not out and ("amalgamation" in s or "scheme" in s or "arrangement" in s):
         out.append(("SCHEME", None, None))
 
     if not out and ("buyback" in s or "buy back" in s or "buy-back" in s):
@@ -343,7 +355,8 @@ def api_rows_to_frame(rows: Iterable[dict]) -> pd.DataFrame:
 
 
 def load_manual_overrides() -> pd.DataFrame:
-    """CSV columns: symbol, ex_date, type, factor, action(add|ignore), note."""
+    """CSV columns: symbol, ex_date, type, factor, action(add|ignore), note.
+    type is SPLIT, BONUS, CONSOLIDATION or DEMERGER (factor = price before / price after)."""
     if not MANUAL_OVERRIDES_FILE.exists():
         return pd.DataFrame(columns=["symbol", "ex_date", "type", "factor", "action", "note"])
     df = pd.read_csv(MANUAL_OVERRIDES_FILE, dtype=str).fillna("")
@@ -457,7 +470,9 @@ def reconcile_ex_dates(actions: pd.DataFrame, store: Store, window: int = 25, to
     actions = actions.copy()
     if "orig_ex_date" not in actions:
         actions["orig_ex_date"] = actions["ex_date"]
-    adj = actions[actions["type"].isin(ADJUSTING_TYPES) & actions["factor"].notna() & actions["key"].notna()]
+    # a demerger factor is measured from the ex-date prices themselves: nothing to reconcile
+    adj = actions[actions["type"].isin(ADJUSTING_TYPES) & (actions["type"] != "DEMERGER")
+                  & actions["factor"].notna() & actions["key"].notna()]
     shifted = 0
     unconfirmed: List[int] = []
     unconfirmed_rows: List[dict] = []
@@ -563,6 +578,14 @@ def build_actions_table(
             if "orig_ex_date" in f:  # undo earlier price re-alignment; it is redone below
                 f["ex_date"] = f["orig_ex_date"].fillna(f["ex_date"])
                 f["purpose"] = f["purpose"].astype(str).str.replace(r" \[ex-date .*? by price check\]", "", regex=True)
+            # tables built before demergers were adjusted typed them SCHEME
+            dem = (f["type"] == "SCHEME") & f["purpose"].astype(str).str.contains(DEMERGER_RE)
+            if dem.any():
+                f.loc[dem, "type"] = "DEMERGER"
+                f.loc[dem, "hash"] = [
+                    _hash(k if isinstance(k, str) else sym, pd.Timestamp(ex).strftime("%Y-%m-%d"), "DEMERGER", fa)
+                    for k, sym, ex, fa in zip(f.loc[dem, "key"], f.loc[dem, "symbol"], f.loc[dem, "ex_date"], f.loc[dem, "factor"])
+                ]
             typed.append(f.loc[:, ACTION_COLUMNS])
             continue
         f = f.copy()
@@ -628,6 +651,7 @@ def build_actions_table(
         dedup = reconcile_ex_dates(dedup, store)
         dedup = dedup.sort_values(["_ident", "ex_date", "type", "_prio"], kind="stable")
         dedup = dedup.drop_duplicates(subset=["_ident", "ex_date", "type"], keep="first")
+        dedup = fill_demerger_from_prices(dedup, store)  # after re-dating, so same-day splits line up
     dedup = _drop_near_duplicates(dedup)
 
     # detect factor disagreements between sources (reported, best source wins)
@@ -725,6 +749,49 @@ def fill_unparsed_from_prices(actions: pd.DataFrame, store: Store, min_move: flo
     return actions
 
 
+def fill_demerger_from_prices(actions: pd.DataFrame, store: Store) -> pd.DataFrame:
+    """Give DEMERGER rows without a factor the one their ex-date shows: the parent's previous
+    close over the ex-date open (NSE prices the demerged business out in a special pre-open
+    session), divided by any split/bonus/consolidation applied on the same trading day.
+    Rows whose gap is below DEMERGER_MIN_FACTOR (or implausibly large, or with no trading
+    within DEMERGER_MAX_GAP_DAYS of the date) are left without a factor, i.e. not applied."""
+    actions = actions.copy()
+    todo = (actions["type"] == "DEMERGER") & actions["factor"].isna() & actions["key"].notna()
+    if not todo.any():
+        return actions
+    others = actions[actions["type"].isin(ADJUSTING_TYPES) & (actions["type"] != "DEMERGER") & actions["factor"].notna()]
+    for key, grp in actions[todo].groupby("key"):
+        if not store.exists(key):
+            continue
+        df = store.read(key, columns=["date", "open", "close"])
+        dates = df["date"].to_numpy(dtype="datetime64[ns]")
+        opens = df["open"].to_numpy(dtype="float64")
+        close = df["close"].to_numpy(dtype="float64")
+        same_key = others[others["key"] == key]
+        for idx, r in grp.iterrows():
+            ex = np.datetime64(r.ex_date, "ns")
+            pos = int(np.searchsorted(dates, ex, side="left"))
+            if pos <= 0 or pos >= len(dates) or (dates[pos] - ex) > np.timedelta64(DEMERGER_MAX_GAP_DAYS, "D"):
+                continue
+            prev, opn = close[pos - 1], opens[pos]
+            if not (prev > 0 and opn > 0):
+                continue
+            # split/bonus factors that apply between the two rows are part of the same gap
+            on_day = same_key[(same_key["ex_date"] > pd.Timestamp(dates[pos - 1])) & (same_key["ex_date"] <= pd.Timestamp(dates[pos]))]
+            other = float(on_day["factor"].prod())
+            f = prev / opn / other
+            if not (DEMERGER_MIN_FACTOR <= f <= DEMERGER_MAX_FACTOR):
+                logger.info("%s demerger %s: ex-date gap %.4f too small to measure - not applied", key, pd.Timestamp(r.ex_date).date(), f)
+                continue
+            f = round(f, 6)
+            note = f" / same-day factor {other:g}" if other != 1 else ""
+            actions.at[idx, "factor"] = f
+            actions.at[idx, "purpose"] = f"{r.purpose} [factor {f:g} from ex-date open {opn:g} vs previous close {prev:g}{note}]"
+            actions.at[idx, "hash"] = _hash(key, pd.Timestamp(r.ex_date).strftime("%Y-%m-%d"), "DEMERGER", f)
+            logger.info("%s demerger %s: factor %g from the ex-date price gap", key, pd.Timestamp(r.ex_date).date(), f)
+    return actions
+
+
 def save_actions(df: pd.DataFrame) -> None:
     ACTIONS_DIR.mkdir(parents=True, exist_ok=True)
     tmp = ACTIONS_FILE.with_suffix(".tmp")
@@ -803,7 +870,8 @@ def verify_key(key: str, df: pd.DataFrame, acts: pd.DataFrame) -> List[dict]:
     dates = df["date"].to_numpy(dtype="datetime64[ns]")
     for r in acts[acts["type"].isin(ADJUSTING_TYPES)].itertuples():
         if pd.isna(r.factor):
-            out.append(_warn(key, r, np.nan, np.nan, np.nan, "factor not parsed"))
+            if r.type != "DEMERGER":  # a demerger too small to measure is left unapplied on purpose
+                out.append(_warn(key, r, np.nan, np.nan, np.nan, "factor not parsed"))
             continue
         ex = np.datetime64(r.ex_date, "ns")
         if ex <= dates[0] or ex > dates[-1]:

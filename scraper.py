@@ -133,7 +133,9 @@ class MissingDates:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({k: sorted(v) for k, v in self._sets.items()}, indent=1))
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps({k: sorted(v) for k, v in self._sets.items()}, indent=1))
+        tmp.replace(self.path)
 
 
 def log_failed_date(kind: str, d: date, reason: str) -> None:
@@ -178,18 +180,21 @@ class NSEClient:
         self._cookies_at = time.monotonic()
 
     def _get(self, url: str, params: Optional[dict] = None, stream: bool = False) -> requests.Response:
-        last_exc: Optional[Exception] = None
+        last_err: object = None  # exception or "HTTP <status>" of the latest failed attempt
         for attempt in range(MAX_RETRIES):
             self._throttle()
             try:
                 r = self.session.get(url, params=params, timeout=self.timeout, stream=stream)
             except requests.RequestException as e:
-                last_exc = e
+                last_err = e
                 backoff = min(2 ** (attempt + 1), 30) + random.uniform(0, 1)
                 logger.info("request error %s (attempt %d) - retry in %.0fs", e, attempt + 1, backoff)
                 time.sleep(backoff)
                 continue
 
+            if r.status_code != 200:
+                r.close()  # a streamed response holds its connection until closed
+                last_err = f"HTTP {r.status_code}"
             if r.status_code == 404:
                 raise ReportUnavailable(url)
             if r.status_code in (401, 403):
@@ -205,7 +210,7 @@ class NSEClient:
             if r.status_code != 200:
                 raise ConnectionError(f"HTTP {r.status_code} for {url}")
             return r
-        raise ConnectionError(f"giving up on {url}: {last_exc}")
+        raise ConnectionError(f"giving up on {url}: {last_err}")
 
     # -- JSON API ------------------------------------------------------------
     def api(self, endpoint: str, params: Optional[dict] = None):
@@ -307,8 +312,15 @@ class NSEClient:
             if not names:
                 raise ReportUnavailable(str(zip_tmp))
             member = next((n for n in names if n.lower().endswith(".csv")), names[0])
-            with zf.open(member) as src, dest.open("wb") as out:
-                out.write(src.read())
+            # extract next to dest and rename: an interrupted or corrupt extraction must not
+            # leave a truncated report that later runs would treat as downloaded
+            part = dest.with_name(dest.name + ".tmp")
+            try:
+                with zf.open(member) as src, part.open("wb") as out:
+                    out.write(src.read())
+                part.replace(dest)
+            finally:
+                part.unlink(missing_ok=True)
 
     def download_delivery(self, d: date, force: bool = False) -> Optional[Path]:
         """Delivery data: sec_bhavdata_full from 2019, MTO before (fallback both)."""

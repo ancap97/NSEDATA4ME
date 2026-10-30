@@ -19,10 +19,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Iterable, List, Optional, Union
 
+import numpy as np
 import pandas as pd
 
+import symbol_master
+from adjuster import ADJUSTING_TYPES
 from adjuster import load_actions as _load_actions
 from breadth import load_breadth as _load_breadth
+from config import STORE_COLUMNS
 from storage import IndexStore, Store
 from symbol_master import EntityResolver, load_master
 
@@ -30,10 +34,24 @@ DateLike = Union[str, date, pd.Timestamp, None]
 
 PRICE_COLS = ("open", "high", "low", "close", "prev_close")
 QTY_COLS = ("volume", "deliv_qty")
+# From this many securities on, numeric column reads go through one multi-threaded pyarrow
+# scan (Store.scan) instead of a file-by-file loop; the result is identical either way.
+SCAN_MIN_KEYS = 16
 
 
 def _ts(d: DateLike) -> Optional[pd.Timestamp]:
     return None if d is None else pd.Timestamp(d)
+
+
+def _store_columns(columns: Optional[List[str]], adjusted: bool) -> Optional[List[str]]:
+    """Store columns needed to produce `columns` (None = read everything).
+
+    `date` is always needed (filters, sort); `adj_factor` when adjusting. `symbol` and `key`
+    are set from the symbol master, so they are never read."""
+    if not columns:
+        return None
+    need = set(columns) | {"date"} | ({"adj_factor"} if adjusted else set())
+    return [c for c in STORE_COLUMNS if c in need and c != "symbol"]
 
 
 def list_symbols(include_delisted: bool = True, include_sme: bool = False) -> pd.DataFrame:
@@ -47,9 +65,27 @@ def list_symbols(include_delisted: bool = True, include_sme: bool = False) -> pd
     return m.reset_index(drop=True)
 
 
+_resolver_cache: dict = {}
+
+
+def _resolver() -> EntityResolver:
+    """EntityResolver.load(), reused while symbol_state.json is unchanged (sync replaces the
+    file on every save, so its mtime/size change). Resolving symbols only reads it."""
+    path = symbol_master.STATE_FILE
+    try:
+        st = path.stat()
+        sig = (str(path), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return EntityResolver.load(path)
+    hit = _resolver_cache.get("state")
+    if hit is None or hit[0] != sig:
+        hit = _resolver_cache["state"] = (sig, EntityResolver.load(path))
+    return hit[1]
+
+
 def resolve_symbols(symbols: Iterable[str], include_sme: bool = False) -> List[str]:
     """Map current or historical symbols to store keys."""
-    resolver = EntityResolver.load()
+    resolver = _resolver()
     keys = []
     for s in symbols:
         s = s.upper().strip()
@@ -75,7 +111,8 @@ def load_data(
     master = load_master()
 
     if symbols is not None:
-        keys = resolve_symbols(symbols, include_sme=True)
+        # an old and a current symbol of one security resolve to the same key: load it once
+        keys = list(dict.fromkeys(resolve_symbols(symbols, include_sme=True)))
     else:
         if master.empty:
             keys = store.list_keys()
@@ -89,33 +126,44 @@ def load_data(
 
     start, end = _ts(start_date), _ts(end_date)
     current_symbol = dict(zip(master["key"], master["symbol"])) if not master.empty else {}
-    frames = []
-    for key in keys:
-        df = store.read(key)
-        if df.empty:
-            continue
-        if start is not None:
-            df = df[df["date"] >= start]
-        if end is not None:
-            df = df[df["date"] <= end]
-        if df.empty:
-            continue
-        df = df.copy()
-        df["key"] = key
-        df["symbol"] = current_symbol.get(key, key)
-        frames.append(df)
+    read_cols = _store_columns(columns, adjusted)
+    scanned = store.scan(keys, read_cols, start, end) if read_cols and len(keys) >= SCAN_MIN_KEYS else None
+    if scanned is not None:
+        out, owner = scanned
+        owner_keys = list(keys)
+    else:
+        frames, owner_keys = [], []
+        for key in keys:
+            df = store.read(key, columns=read_cols)
+            if df.empty:
+                continue
+            if start is not None:
+                df = df[df["date"] >= start]
+            if end is not None:
+                df = df[df["date"] <= end]
+            if df.empty:
+                continue
+            frames.append(df)
+            owner_keys.append(key)
+        out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+        owner = np.repeat(np.arange(len(frames)), [len(f) for f in frames])
 
-    if not frames:
+    if out.empty:
         return pd.DataFrame()
-    out = pd.concat(frames, ignore_index=True)
+    out["key"] = np.array(owner_keys, dtype=object)[owner]
+    out["symbol"] = np.array([current_symbol.get(k, k) for k in owner_keys], dtype=object)[owner]
     if adjusted:
         af = out["adj_factor"]
         for c in PRICE_COLS:
-            out[c] = out[c] / af
+            if c in out:
+                out[c] = out[c] / af
         for c in QTY_COLS:
-            out[c] = (out[c].astype("Float64") * af).round().astype("Int64")
+            if c in out:
+                out[c] = (out[c].astype("Float64") * af).round().astype("Int64")
     out = out.sort_values(["symbol", "date"]).reset_index(drop=True)
     cols = ["date", "symbol", "key", "isin", "series", *PRICE_COLS, "volume", "turnover", "trades", "deliv_qty", "deliv_pct", "adj_factor"]
+    if read_cols is not None:  # only the requested columns were read
+        cols = [c for c in cols if c in out.columns]
     out = out.loc[:, cols]
     if columns:
         out = out.loc[:, [c for c in columns if c in out.columns]]
@@ -175,5 +223,5 @@ def load_actions(symbol: Optional[str] = None, adjusting_only: bool = False) -> 
         key = resolve_symbols([symbol], include_sme=True)[0]
         df = df[df["key"] == key]
     if adjusting_only:
-        df = df[df["type"].isin(("SPLIT", "BONUS", "CONSOLIDATION"))]
+        df = df[df["type"].isin(ADJUSTING_TYPES)]
     return df.sort_values("ex_date").reset_index(drop=True)

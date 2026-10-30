@@ -55,7 +55,7 @@ from pipeline import (
     load_indices_day,
 )
 from scraper import NSEClient, raw_path
-from storage import IndexStore, Store, load_meta, save_meta
+from storage import IndexStore, Store, allow_parallel_rewrites, load_meta, save_meta
 from symbol_master import EntityResolver
 
 logger = logging.getLogger("sync")
@@ -196,7 +196,7 @@ def sync_actions(client: NSEClient, meta: dict, resolver: EntityResolver, new_pr
 
 def changed_action_keys(old: pd.DataFrame, new: pd.DataFrame) -> set:
     def sig(df: pd.DataFrame) -> set:
-        adj = df[df["type"].isin(ADJUSTING_TYPES) & df["key"].notna()]
+        adj = df[df["type"].isin(ADJUSTING_TYPES) & df["key"].notna() & df["factor"].notna()]
         return set(zip(adj["key"], adj["ex_date"].astype(str), adj["factor"].round(8)))
 
     a, b = sig(old), sig(new)
@@ -339,14 +339,15 @@ def run_sync(
             save_meta(meta)
 
         def on_committed(d: date, keys: List[str]) -> None:
+            # persist identity state with the rows it describes, before the day is marked
+            # committed, so a crash between two days cannot leave the resolver behind the store
+            # (re-resolving a rolled-back day with the saved state is idempotent)
+            resolver.save()
             meta["in_progress"] = None
             meta["last_synced"] = max(meta["last_synced"], d.isoformat())
             if not has_delivery(d):
                 meta.setdefault("pending_delivery", []).append(d.isoformat())
             save_meta(meta)
-            # persist identity state with the rows it describes, so a crash between two
-            # days cannot leave the resolver behind the store
-            resolver.save()
             summary["ingested"].append(d.isoformat())
             idx = load_indices_day(d)
             if idx is None and raw_path("indices", d).exists():
@@ -363,7 +364,8 @@ def run_sync(
             before_commit=before_commit, on_day_committed=on_committed,
         )
         summary["renames"] = stats["renames"]
-        resolver.save_outputs(as_of=available[-1])
+        # last_synced, not available[-1]: with --redo-date the re-ingested day is in the past
+        resolver.save_outputs(as_of=date.fromisoformat(meta["last_synced"]))
         meta["symbol_count"] = len(resolver.entities)
 
         # 5. corporate actions + adjustments
@@ -435,6 +437,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     args = ap.parse_args(argv)
     redo = date.fromisoformat(args.redo_date) if args.redo_date else None
+    allow_parallel_rewrites()  # sync.py runs main() under a __main__ guard, as "spawn" needs
 
     if not args.no_fetch:
         ensure_data()  # fresh clone: pull the snapshot from the data branch, then sync on top
