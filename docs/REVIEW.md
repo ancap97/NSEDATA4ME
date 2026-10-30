@@ -55,11 +55,11 @@ or cosmetic. Each fix has a test that failed before it (section 6).
 | 6 | `sync.py:343-349` | `on_committed` saves `meta.json` (day committed) before `resolver.save()`. A crash between them leaves the resolver one day behind the store, the opposite of what the comment intends (new entities from that day are recreated later with the wrong `first_date`). Saving the resolver first is idempotent on recovery. | L | fixed `4bd2b5e` |
 | 7 | `symbol_master.py:283-288`, `scraper.py:134-136` | `symbol_master.parquet`, `isin_symbol_map.json` and `logs/missing_dates.json` are written in place. A crash mid-write corrupts the symbol master, which makes every `loader` call fail (`load_master`). | L | fixed `9f7aa99` |
 | 8 | `scraper.py:180-208` | With `stream=True`, responses for 401/403/429/5xx are never closed before retrying (connection not returned to the pool), and after exhausting retries on 403 the error reads `giving up on <url>: None` because `last_exc` only tracks exceptions. | L | fixed `58d2bc0` |
-| 9 | `symbol_master.py:185-239` | If one day lists the same ISIN under two symbols, the second row renames the entity after the first row's key was assigned; the final loop then hits `KeyError` on the old key and the sync aborts. Not seen in NSE data (per-day dedupe is by symbol, not ISIN). | L | owner decision (5.4) |
-| 10 | `loader.py:78` | `load_data(["INFY", "INFOSYSTCH"])` resolves both to `INFY` and returns every row twice; `load_wide(symbols=[...])` with such aliases raises "Index contains duplicate entries". Changing it changes output -> section 5. | L | owner decision (5.1) |
+| 9 | `symbol_master.py:185-239` | If one day lists the same ISIN under two symbols, the second row renames the entity after the first row's key was assigned; the final loop then hits `KeyError` on the old key and the sync aborts. Not seen in NSE data (per-day dedupe is by symbol, not ISIN). | L | owner decision (5.3) |
+| 10 | `loader.py:78` | `load_data(["INFY", "INFOSYSTCH"])` resolves both to `INFY` and returns every row twice; `load_wide(symbols=[...])` with such aliases raises "Index contains duplicate entries". Changing it changes output -> section 5. | L | fixed `084a9b5` (owner decision taken) |
 | 11 | `README.md:9`, `adjuster.py:62` | README says prices are adjusted for demergers; `ADJUSTING_TYPES` is SPLIT/BONUS/CONSOLIDATION only and demergers are stored as `SCHEME` with no factor (e.g. TMPV/TATAMOTORS 2025-10-14: 660.75 -> 395.45 with `adj_factor` 1.0; RELIANCE 2023-07-20, ITC 2025-01-06). A manual override with `type=DEMERGER` would be silently ignored. -> section 5. | M | fixed `78d9207` (owner decision taken, see 6) |
-| 12 | `parsers.py:190-219` | `merge_delivery` docstring says BE/BZ use volume as delivery "when the delivery report does not list them"; the code always overwrites with volume / 100 %. -> section 5 (doc vs behaviour). | L | owner decision (5.2) |
-| 13 | `storage.py:99-108` | `Store.rename` onto an existing file concatenates `[new, old]` and keeps the *old* row on duplicate dates. Only reachable when a file exists for a key that is not an entity. | L | owner decision (5.3) |
+| 12 | `parsers.py:190-219` | `merge_delivery` docstring says BE/BZ use volume as delivery "when the delivery report does not list them"; the code always overwrites with volume / 100 %. -> section 5 (doc vs behaviour). | L | owner decision (5.1) |
+| 13 | `storage.py:99-108` | `Store.rename` onto an existing file concatenates `[new, old]` and keeps the *old* row on duplicate dates. Only reachable when a file exists for a key that is not an entity. | L | owner decision (5.2) |
 
 Checked and found correct (kept here so they are not re-investigated): `compute_adj_factor`
 (strictly-after semantics, cumulative product; recomputing it for all 4,583 securities reproduces
@@ -123,27 +123,23 @@ UDiFF/old filename switch, `SEC_FULL_START_DATE` preference order, the `B023` ru
 
 Not changed, because fixing them changes existing outputs or needs a design choice.
 
-1. **Aliased symbols in one call (#10).** `load_data(["INFY", "INFOSYSTCH"])` returns every INFY
-   row twice and `load_wide(symbols=[...])` with such a pair raises "Index contains duplicate
-   entries". De-duplicating the resolved keys (keeping order) is a one-line change in
-   `load_data`, but it changes the output of those calls.
-2. **`merge_delivery` doc vs behaviour (#12).** BE/BZ rows always get `deliv_qty = volume`,
+1. **`merge_delivery` doc vs behaviour (#12).** BE/BZ rows always get `deliv_qty = volume`,
    `deliv_pct = 100` even when the delivery report lists them; the docstring says only when they
    are missing. Either the docstring or the behaviour should change (changing behaviour rewrites
    history on the next `--redo-date` only).
-3. **`Store.rename` onto an existing file (#13)** keeps the old file's row when both have the same
+2. **`Store.rename` onto an existing file (#13)** keeps the old file's row when both have the same
    date. Only reachable when a file exists for a key that is not an entity; which side should
    win is a policy choice.
-4. **Same ISIN under two symbols on one day (#9)** would abort the sync with `KeyError`. Not seen
+3. **Same ISIN under two symbols on one day (#9)** would abort the sync with `KeyError`. Not seen
    in NSE data; a fix has to decide which symbol becomes the entity's key that day.
-5. **Index files duplicate their predecessors.** `IndexStore.append` reads the merged canonical
+4. **Index files duplicate their predecessors.** `IndexStore.append` reads the merged canonical
    history, so `nifty_50.parquet` also holds the S&P CNX Nifty / CNX Nifty rows (3,618 rows, 911
    of them copies). Reads de-duplicate, so outputs are right; cleaning it up rewrites files.
-6. **Lint configuration.** There is no ruff config in the repo, so `ruff check .` uses each
+5. **Lint configuration.** There is no ruff config in the repo, so `ruff check .` uses each
    installed version's defaults (0.16/0.17 here enable pyupgrade, blind-except, datetime-tz rules).
    Suggest committing a `[tool.ruff]` section (e.g. `E4,E7,E9,F,B,I`) and running ruff + pytest in
    a GitHub Action.
-7. **Holidays around New Year.** Only the current year's NSE list is kept, so `healthcheck` can
+6. **Holidays around New Year.** Only the current year's NSE list is kept, so `healthcheck` can
    count last December's holidays as "days behind" for a few days in January (sync itself recovers
    by inferring them).
 
@@ -151,7 +147,7 @@ Not changed, because fixing them changes existing outputs or needs a design choi
 
 ### Safety net (Step 2)
 
-* `tests/` (164 tests, offline, ~100 s): fixture files in NSE's real formats (old and UDiFF
+* `tests/` (165 tests, offline, ~110 s): fixture files in NSE's real formats (old and UDiFF
   bhavcopy, sec_bhavdata_full, MTO, ind_close_all, PR bc file), a synthetic market built through
   the real ingest/adjust/breadth code (split, bonus announced under an old symbol, rename,
   delisting, SME issue, SME->main migration, shared symbol, renamed index), a fake NSE server for
@@ -248,6 +244,13 @@ Notes
   fails the continuity check with the snapshot's own table too; it is reported again when the
   migration re-verifies KMSUGAR (demerger 2026-10-01).
 
+### Aliased symbols (owner decision taken: #10 fixed)
+
+`load_data(symbols=...)` de-duplicates the resolved keys (first-seen order), so
+`load_data(["INFY", "INFOSYSTCH"])` returns INFY once and `load_wide(symbols=[...])` with an old
+and a current symbol no longer raises. `resolve_symbols` is unchanged. Golden digests match (the
+golden symbol list has no two aliases of one security).
+
 ### Live check (Step 5)
 
 `python sync.py --redo-date 2026-10-23` on a copy of the snapshot (code + data in a scratch folder):
@@ -261,12 +264,12 @@ copy: HEALTHY, exit 0 (3 trading days not yet synced, as expected for a 2026-10-
 
 ### Final state (Step 6)
 
-* `python -m pytest -q`: 163 passed, 1 skipped (the golden test without `NSE_GOLDEN_DATA`).
+* `python -m pytest -q`: 164 passed, 1 skipped (the golden test without `NSE_GOLDEN_DATA`).
 * Golden check on `fcb3714`: all 29 digests match.
 * `ruff check .` (0.16.9): core E4/E7/E9/F 2 -> 0; tests clean. Total on the modules 194 -> 208:
   +6 UP006 / +9 UP045 annotation-style (new code follows the modules' `typing.Optional`/`List`
   style), +1 BLE001 (`IndexStore` keeps the old broad `except Exception` semantics), -2 F401.
 * Public API, CLI flags/exit codes, on-disk layout, Parquet schemas, meta.json and
   manual_overrides.csv formats unchanged (manual_overrides.csv now also accepts `type=DEMERGER`).
-  Deliberate output change: demerger adjustment (above). New, optional: env var `NSE_SYNC_WORKERS`,
+  Deliberate output changes: demerger adjustment and aliased symbols (above). New, optional: env var `NSE_SYNC_WORKERS`,
   `Store.scan`, `storage.allow_parallel_rewrites`.

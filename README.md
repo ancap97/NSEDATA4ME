@@ -70,7 +70,8 @@ Notes
   pre-open session discovers), net of any split or bonus on the same day. Gaps under 2 % are not
   applied (indistinguishable from an ordinary move); for an exact ratio add a `DEMERGER` row to
   `manual_overrides.csv` with `factor` = price before / price after.
-* `symbol` is the current symbol; old names resolve (`load_symbol("INFOSYSTCH")`).
+* `symbol` is the current symbol; old names resolve (`load_symbol("INFOSYSTCH")`). An old and a
+  current name of one security in the same call load it once.
 * Use `close.shift(1)` for returns, not `prev_close` (NSE's reference price).
 * `trades` exists from 2011-06-22; delivery from 2005.
 * Loading every symbol reads ~4,500 files — pass `start_date`/`columns` and cache the result (e.g. `px.to_parquet(...)`) in your own project.
